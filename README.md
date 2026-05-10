@@ -2,11 +2,13 @@
 
 An Obsidian plugin for exporting notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.
 
+> **Status:** v0.1 — core export pipeline implemented, pending real-vault testing.
+
 ## Features
 
-- **Markdown Bundle**: combines selected notes into a single `document.md` with copied attachments and rewritten links
-- **HTML Document**: generates a standalone `index.html` with table of contents and linked assets
-- **Print-ready HTML**: produces HTML with print stylesheet for PDF output via browser print dialog
+- **Markdown Bundle** — combines selected notes into a single `document.md` with copied attachments and rewritten links
+- **HTML Document** — generates a standalone `index.html` with table of contents and linked assets
+- **Print-ready HTML** — produces HTML with print stylesheet for PDF output via browser print dialog
 
 ## Export Sources
 
@@ -17,7 +19,7 @@ An Obsidian plugin for exporting notes, folders, and query results into Markdown
 
 ## Usage
 
-1. Open command palette and run **Document Exporter: Export documents**
+1. Open command palette → **Document Exporter: Export documents**
 2. Choose source, format, output folder, and sort order
 3. Review the confirmation summary
 4. Click **Export**
@@ -36,7 +38,7 @@ An Obsidian plugin for exporting notes, folders, and query results into Markdown
 ## Limitations
 
 - Direct PDF generation is not supported — use Print-ready HTML and browser print instead
-- Inline note embeds (`![[Note]]`) are not expanded in v0.1; they are preserved as links
+- Inline note embeds (`![[Note]]`) are not expanded; they are preserved as links
 - Dataview queries are not executed during export
 - Canvas files are not supported
 - The built-in Markdown-to-HTML converter handles common syntax but does not support all Obsidian-specific rendering (callouts, mermaid, math)
@@ -57,6 +59,10 @@ npm run dev      # watch mode
 npm run build    # production build
 npm test         # run tests
 ```
+
+## Roadmap
+
+See [development plan](docs/plans/2026-05-10-document-exporter-development-plan.md) for milestones and future plans.
 
 ## License
 
