@@ -26,26 +26,29 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl)
-			.setName("Default export profile")
-			.setDesc("Choose the default format for exports.")
-			.addDropdown((dd) => {
-				dd.addOptions(PROFILE_LABELS);
-				dd.setValue(this.plugin.settings.defaultProfile);
-				dd.onChange(async (v) => {
-					this.plugin.settings.defaultProfile = v as ExportProfileId;
-					await this.plugin.saveSettings();
-				});
-			});
+		containerEl.createEl("h2", { text: "Document Exporter" });
 
+		// Output folder — most important setting, shown first
 		new Setting(containerEl)
-			.setName("Default output folder")
-			.setDesc("Folder name for exported documents (relative to vault root).")
+			.setName("Output folder")
+			.setDesc("Exported files will be saved here (relative to vault root). You can change this path to any folder in your vault.")
 			.addText((text) => {
 				text.setPlaceholder("exports");
 				text.setValue(this.plugin.settings.defaultOutputFolder);
 				text.onChange(async (v) => {
 					this.plugin.settings.defaultOutputFolder = v;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Default export format")
+			.setDesc("Choose the default format when opening the export dialog.")
+			.addDropdown((dd) => {
+				dd.addOptions(PROFILE_LABELS);
+				dd.setValue(this.plugin.settings.defaultProfile);
+				dd.onChange(async (v) => {
+					this.plugin.settings.defaultProfile = v as ExportProfileId;
 					await this.plugin.saveSettings();
 				});
 			});
@@ -61,6 +64,8 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
+
+		containerEl.createEl("h3", { text: "Advanced" });
 
 		new Setting(containerEl)
 			.setName("Include source path comments")

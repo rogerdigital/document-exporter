@@ -10,30 +10,65 @@ An Obsidian plugin for exporting notes, folders, and query results into Markdown
 - **HTML Document** — generates a standalone `index.html` with table of contents and linked assets
 - **Print-ready HTML** — produces HTML with print stylesheet for PDF output via browser print dialog
 
-## Export Sources
+## How to Use
 
-- Current file
-- Selected files (via fuzzy search picker)
-- Folder export (recursive)
-- Notes matching a tag
+There are multiple ways to start an export:
 
-## Usage
+| Entry Point | How |
+|-------------|-----|
+| **Sidebar icon** | Click the export icon in the left sidebar |
+| **Right-click a file** | In the file explorer, right-click a Markdown file → "Export this file" |
+| **Right-click a folder** | In the file explorer, right-click a folder → "Export this folder" |
+| **Right-click in editor** | Right-click inside a note → "Export current file" |
+| **Command palette** | `Cmd/Ctrl+P` → type "Export documents" |
 
-1. Open command palette → **Document Exporter: Export documents**
-2. Choose source, format, output folder, and sort order
-3. Review the confirmation summary
+### Export Flow
+
+1. Choose **source** (current file / folder / selected files / tag filter)
+2. Choose **format** (Markdown Bundle / HTML / Print-ready HTML)
+3. Choose **output folder** — type a path or click **Browse** to pick from your vault
+4. Click **Next** → review the summary → click **Export**
+5. A notification shows the output path when done
+
+## Examples
+
+### Export the current note as Markdown
+
+1. Open a note in the editor
+2. Right-click → **Export current file**
+3. Format: **Markdown Bundle**, Output: `exports`
 4. Click **Export**
+5. Result: `exports/document.md` + `exports/assets/` (if there are images)
+
+### Export a folder as HTML
+
+1. In the file explorer, right-click a folder (e.g. `projects/my-project`)
+2. Click **Export this folder**
+3. Format: **HTML Document**, Output: `exports`
+4. Click **Export**
+5. Result: `exports/index.html` — open in a browser, all notes are combined with a table of contents
+
+### Export notes as a PDF
+
+1. Start an export (sidebar icon or command palette)
+2. Source: select files or folder
+3. Format: **Print-ready HTML**
+4. Click **Export**
+5. Open `exports/index.html` in your browser
+6. Press `Cmd/Ctrl+P` → Save as PDF
 
 ## Settings
 
+Open **Settings → Document Exporter**.
+
 | Setting | Description | Default |
 |---------|-------------|---------|
-| Default export profile | Format used when opening the modal | Markdown Bundle |
-| Default output folder | Folder name for exports (relative to vault root) | `exports` |
+| **Output folder** | Where exported files are saved (relative to vault root). Change this to any folder you like. | `exports` |
+| Default export format | Format used when opening the export dialog | Markdown Bundle |
 | Default sort mode | How notes are ordered in the output | File path |
 | Include source path comments | Add HTML comments showing each section's origin | Off |
 | Copy attachments | Copy referenced images and files into the export bundle | On |
-| Overwrite existing exports | Overwrite if the output folder already exists | Off |
+| Overwrite existing exports | Overwrite if the output folder already exists. Otherwise a timestamped folder is created. | Off |
 
 ## Limitations
 
