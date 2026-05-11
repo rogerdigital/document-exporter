@@ -52,7 +52,7 @@ export class ExportRunner {
 
 		// Handle existing output folder
 		let outputRoot = plan.outputRoot;
-		if (!settings.overwriteExisting) {
+		if (!settings.overwriteExisting && !writer.isExternal(outputRoot)) {
 			if (await writer.folderExists(outputRoot)) {
 				outputRoot = await writer.timestampedFolder(outputRoot);
 			}
