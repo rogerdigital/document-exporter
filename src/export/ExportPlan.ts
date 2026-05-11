@@ -62,8 +62,10 @@ export function validatePlan(plan: ExportPlan): string | null {
 	if (!plan.outputRoot || plan.outputRoot.trim() === "") {
 		return "Output folder cannot be empty.";
 	}
-	if (plan.outputRoot.startsWith("/") || plan.outputRoot.startsWith("..")) {
-		return "Output folder must be a relative path within the vault.";
+	// Allow absolute paths (external) and vault-relative paths
+	// Only reject parent-traversal relative paths
+	if (plan.outputRoot.startsWith("..")) {
+		return "Output folder cannot use parent directory traversal.";
 	}
 	return null;
 }
