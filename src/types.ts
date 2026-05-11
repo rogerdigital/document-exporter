@@ -31,6 +31,7 @@ export type ExportPlan = {
 	source: ExportSource;
 	inputFiles: string[];
 	outputRoot: string;
+	outputFilename: string;
 	outputFiles: string[];
 	attachmentCopies: AttachmentCopy[];
 	sort: ExportSort;

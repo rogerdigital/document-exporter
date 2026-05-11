@@ -51,7 +51,7 @@ describe("HTML Document rendering", () => {
 				sections: [{ sourcePath: "a.md", title: "A", markdown: "x", frontmatter: {} }],
 				attachments: [{ sourcePath: "img.png", outputRelativePath: "assets/img.png" }],
 			};
-			const plan = { outputRoot: "exports", profile: "html-document" as const };
+			const plan = { outputRoot: "exports", outputFilename: "index", profile: "html-document" as const };
 
 			await invokeRenderHtml(doc, plan, writer);
 
@@ -103,12 +103,12 @@ async function renderTestHtml(sections: any[], printReady = false) {
 		sections,
 		attachments: [],
 	};
-	const plan = { outputRoot: "exports", profile: "html-document" as const };
+	const plan = { outputRoot: "exports", outputFilename: "index", profile: "html-document" as const };
 
 	await invokeRenderHtml(doc, plan, writer, printReady);
 
 	const writeCall = (writer.writeText as any).mock.calls.find(
-		(c: string[]) => c[0].endsWith("index.html"),
+		(c: string[]) => c[0].endsWith(".html"),
 	);
 	const html = writeCall ? writeCall[1] : "";
 

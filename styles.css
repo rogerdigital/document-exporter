@@ -44,6 +44,7 @@
 
 .export-modal-browse-btn {
 	flex-shrink: 0;
+	white-space: nowrap;
 }
 
 .export-modal-buttons {

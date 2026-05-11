@@ -10,13 +10,16 @@ export async function renderHtmlDocument(
 	const warnings: string[] = [];
 
 	await writer.ensureFolder(plan.outputRoot);
-	await writer.ensureFolder(`${plan.outputRoot}/assets`);
+	if (doc.attachments.length > 0) {
+		await writer.ensureFolder(`${plan.outputRoot}/assets`);
+	}
 
 	const toc = generateToc(doc.sections);
 	const body = renderSections(doc.sections);
 	const html = buildHtmlDoc(doc.title, toc, body, printReady);
 
-	await writer.writeText(`${plan.outputRoot}/index.html`, html);
+	const filename = plan.outputFilename.replace(/\.(md|html|htm)$/i, '');
+	await writer.writeText(`${plan.outputRoot}/${filename}.html`, html);
 
 	for (const att of doc.attachments) {
 		try {
