@@ -38,16 +38,16 @@ describe("validatePlan", () => {
 		expect(result).toBe("Output folder cannot be empty.");
 	});
 
-	it("returns error for absolute outputRoot paths", () => {
+	it("allows absolute outputRoot paths (external)", () => {
 		const plan = makePlan({ outputRoot: "/absolute/path" });
 		const result = validatePlan(plan);
-		expect(result).toBe("Output folder must be a relative path within the vault.");
+		expect(result).toBeNull();
 	});
 
 	it("returns error for outputRoot starting with ..", () => {
 		const plan = makePlan({ outputRoot: "../escape" });
 		const result = validatePlan(plan);
-		expect(result).toBe("Output folder must be a relative path within the vault.");
+		expect(result).toBe("Output folder cannot use parent directory traversal.");
 	});
 
 	it("returns null for valid plan", () => {
