@@ -18,6 +18,7 @@ export type ExportModalResult = {
 	source: ExportSource;
 	profile: ExportProfileId;
 	outputFolder: string;
+	outputFilename: string;
 	sort: ExportSort;
 };
 
@@ -30,6 +31,7 @@ export class ExportModal extends Modal {
 	private filterTag = "";
 	private profile: ExportProfileId;
 	private outputFolder: string;
+	private outputFilename: string;
 	private sort: ExportSort;
 	private preselectedFile?: TFile;
 	private preselectedFolder?: TFolder;
@@ -39,6 +41,7 @@ export class ExportModal extends Modal {
 		this.settings = settings;
 		this.profile = settings.defaultProfile;
 		this.outputFolder = settings.defaultOutputFolder;
+		this.outputFilename = this.deriveDefaultFilename();
 		this.sort = { ...settings.defaultSort };
 		this.preselectedFile = preselectedFile;
 		this.preselectedFolder = preselectedFolder;
@@ -132,6 +135,18 @@ export class ExportModal extends Modal {
 
 		// Output folder with browser — supports both vault and system paths
 		this.renderOutputFolderPicker(contentEl);
+
+		// Output filename
+		const filenameRow = contentEl.createDiv({ cls: "export-modal-row" });
+		filenameRow.createEl("label", { text: "File name" });
+		const filenameInput = filenameRow.createEl("input", {
+			type: "text",
+			attr: { placeholder: "document" },
+		});
+		filenameInput.value = this.outputFilename;
+		filenameInput.addEventListener("input", (e) => {
+			this.outputFilename = (e.target as HTMLInputElement).value;
+		});
 
 		// Sort mode
 		const sortRow = contentEl.createDiv({ cls: "export-modal-row" });
@@ -233,8 +248,9 @@ export class ExportModal extends Modal {
 			const sysBtn = row.createEl("button", { text: "Choose...", cls: "export-modal-browse-btn" });
 			sysBtn.addEventListener("click", async () => {
 				try {
-					// @ts-ignore
-					const { dialog } = require("electron");
+					const electron = (window as any).require("electron");
+					const dialog = electron.remote?.dialog ?? electron.dialog;
+					if (!dialog) return;
 					const result = await dialog.showOpenDialog({
 						properties: ["openDirectory", "createDirectory"],
 						title: "Select output folder",
@@ -243,8 +259,8 @@ export class ExportModal extends Modal {
 						input.value = result.filePaths[0];
 						onChange(result.filePaths[0]);
 					}
-				} catch {
-					// Fallback: just let user type the path
+				} catch (err) {
+					console.error("Document Exporter: failed to open folder dialog", err);
 				}
 			});
 		}
@@ -257,7 +273,7 @@ export class ExportModal extends Modal {
 
 		const summary = contentEl.createDiv({ cls: "export-confirm-summary" });
 		summary.createEl("p", { text: `Format: ${PROFILE_OPTIONS[result.profile]}` });
-		summary.createEl("p", { text: `Output: ${result.outputFolder}` });
+		summary.createEl("p", { text: `Output: ${result.outputFolder}/${result.outputFilename}` });
 		summary.createEl("p", { text: `Source: ${SOURCE_OPTIONS[result.source.type]}` });
 		summary.createEl("p", { text: `Sort: ${result.sort.mode} (${result.sort.direction})` });
 
@@ -277,6 +293,20 @@ export class ExportModal extends Modal {
 			this.close();
 			this.resolve?.(result);
 		});
+	}
+
+	private deriveDefaultFilename(): string {
+		if (this.preselectedFile) {
+			return this.preselectedFile.basename;
+		}
+		if (this.preselectedFolder) {
+			return this.preselectedFolder.name;
+		}
+		const activeFile = this.app.workspace.getActiveFile();
+		if (activeFile) {
+			return activeFile.basename;
+		}
+		return "export";
 	}
 
 	private buildSource(): ExportSource {
@@ -300,6 +330,7 @@ export class ExportModal extends Modal {
 			source: this.buildSource(),
 			profile: this.profile,
 			outputFolder: this.outputFolder,
+			outputFilename: this.outputFilename || "export",
 			sort: this.sort,
 		};
 	}

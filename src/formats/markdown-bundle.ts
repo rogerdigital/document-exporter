@@ -10,7 +10,11 @@ export async function renderMarkdownBundle(
 
 	// Ensure output folder
 	await writer.ensureFolder(plan.outputRoot);
-	await writer.ensureFolder(`${plan.outputRoot}/assets`);
+
+	// Create assets folder only when there are attachments
+	if (doc.attachments.length > 0) {
+		await writer.ensureFolder(`${plan.outputRoot}/assets`);
+	}
 
 	// Combine sections into document.md
 	const parts: string[] = [];
@@ -23,7 +27,8 @@ export async function renderMarkdownBundle(
 	}
 
 	const content = parts.join("\n");
-	await writer.writeText(`${plan.outputRoot}/document.md`, content);
+	const filename = plan.outputFilename.replace(/\.(md|html|htm)$/i, '');
+	await writer.writeText(`${plan.outputRoot}/${filename}.md`, content);
 
 	// Copy attachments
 	for (const att of doc.attachments) {

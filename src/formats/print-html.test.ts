@@ -20,6 +20,7 @@ describe("print-html", () => {
 			source: { type: "folder" as const, path: "notes", recursive: true },
 			inputFiles: ["a.md"],
 			outputRoot: "exports",
+			outputFilename: "index",
 			outputFiles: ["exports/index.html"],
 			attachmentCopies: [],
 			sort: { mode: "path" as const, direction: "asc" as const },

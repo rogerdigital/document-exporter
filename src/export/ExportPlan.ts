@@ -7,6 +7,7 @@ export class ExportPlanBuilder {
 	private profile: ExportProfileId;
 	private outputRoot: string;
 	private sort: ExportSort;
+	private outputFilename: string;
 	private inputFiles: string[] = [];
 
 	constructor(
@@ -15,12 +16,14 @@ export class ExportPlanBuilder {
 		profile: ExportProfileId,
 		outputRoot: string,
 		sort: ExportSort,
+		outputFilename: string,
 	) {
 		this.app = app;
 		this.source = source;
 		this.profile = profile;
 		this.outputRoot = outputRoot;
 		this.sort = sort;
+		this.outputFilename = outputFilename;
 	}
 
 	setInputFiles(paths: string[]): this {
@@ -34,6 +37,7 @@ export class ExportPlanBuilder {
 			source: this.source,
 			inputFiles: this.inputFiles,
 			outputRoot: this.outputRoot,
+			outputFilename: this.outputFilename,
 			outputFiles: this.computeOutputFiles(),
 			attachmentCopies: [],
 			sort: this.sort,
@@ -41,17 +45,18 @@ export class ExportPlanBuilder {
 	}
 
 	private computeOutputFiles(): string[] {
+		const baseName = this.stripExtension(this.outputFilename);
 		switch (this.profile) {
 			case "markdown-bundle":
-				return [
-					`${this.outputRoot}/document.md`,
-				];
+				return [`${this.outputRoot}/${baseName}.md`];
 			case "html-document":
 			case "print-html":
-				return [
-					`${this.outputRoot}/index.html`,
-				];
+				return [`${this.outputRoot}/${baseName}.html`];
 		}
+	}
+
+	private stripExtension(name: string): string {
+		return name.replace(/\.(md|html|htm)$/i, "");
 	}
 }
 
@@ -62,8 +67,6 @@ export function validatePlan(plan: ExportPlan): string | null {
 	if (!plan.outputRoot || plan.outputRoot.trim() === "") {
 		return "Output folder cannot be empty.";
 	}
-	// Allow absolute paths (external) and vault-relative paths
-	// Only reject parent-traversal relative paths
 	if (plan.outputRoot.startsWith("..")) {
 		return "Output folder cannot use parent directory traversal.";
 	}

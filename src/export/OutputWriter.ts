@@ -74,6 +74,16 @@ export class OutputWriter {
 		return `${basePath}-${ts}`;
 	}
 
+	async isFolderEmpty(folderPath: string): Promise<boolean> {
+		if (this.isExternal(folderPath)) {
+			const entries = fs.readdirSync(folderPath);
+			return entries.length === 0;
+		}
+		const folder = this.app.vault.getAbstractFileByPath(folderPath);
+		if (!folder || !("children" in folder)) return true;
+		return (folder as any).children.length === 0;
+	}
+
 	isExternal(p: string): boolean {
 		if (p.startsWith("/")) return true;
 		if (/^[A-Za-z]:/.test(p)) return true;
