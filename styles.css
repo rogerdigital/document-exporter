@@ -23,6 +23,29 @@
 	margin-bottom: 0.75em;
 }
 
+.export-modal-folder-picker {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 0.75em;
+	gap: 0.5em;
+}
+
+.export-modal-folder-picker label {
+	flex-shrink: 0;
+	width: 8em;
+	font-weight: 500;
+}
+
+.export-modal-folder-input {
+	flex: 1;
+	min-width: 0;
+}
+
+.export-modal-browse-btn {
+	flex-shrink: 0;
+}
+
 .export-modal-buttons {
 	display: flex;
 	justify-content: flex-end;
