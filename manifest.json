@@ -3,7 +3,7 @@
   "name": "Document Exporter",
   "version": "0.1.0",
   "minAppVersion": "1.0.0",
-  "description": "Export Obsidian notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.",
+  "description": "Export notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.",
   "author": "Roger Deng",
   "isDesktopOnly": false
 }
