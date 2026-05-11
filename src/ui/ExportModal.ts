@@ -1,4 +1,4 @@
-import { App, Modal, TFile, FuzzySuggestModal } from "obsidian";
+import { App, Modal, TFile, TFolder, FuzzySuggestModal } from "obsidian";
 import { ExportProfileId, ExportSettings, ExportSource, ExportSort } from "@/types";
 
 const PROFILE_OPTIONS: Record<ExportProfileId, string> = {
@@ -31,16 +31,26 @@ export class ExportModal extends Modal {
 	private profile: ExportProfileId;
 	private outputFolder: string;
 	private sort: ExportSort;
+	private preselectedFile?: TFile;
+	private preselectedFolder?: TFolder;
 
-	constructor(app: App, settings: ExportSettings) {
+	constructor(app: App, settings: ExportSettings, preselectedFile?: TFile, preselectedFolder?: TFolder) {
 		super(app);
 		this.settings = settings;
 		this.profile = settings.defaultProfile;
 		this.outputFolder = settings.defaultOutputFolder;
 		this.sort = { ...settings.defaultSort };
+		this.preselectedFile = preselectedFile;
+		this.preselectedFolder = preselectedFolder;
 	}
 
 	onOpen(): void {
+		if (this.preselectedFile) {
+			this.sourceType = "current-file";
+		} else if (this.preselectedFolder) {
+			this.sourceType = "folder";
+			this.folderPath = this.preselectedFolder.path;
+		}
 		this.renderForm();
 	}
 
@@ -75,13 +85,7 @@ export class ExportModal extends Modal {
 		const renderSourceFields = () => {
 			sourceFields.empty();
 			if (this.sourceType === "folder") {
-				const row = sourceFields.createDiv({ cls: "export-modal-row" });
-				row.createEl("label", { text: "Folder path" });
-				const input = row.createEl("input", { type: "text", attr: { placeholder: "notes/project" } });
-				input.value = this.folderPath;
-				input.addEventListener("input", (e) => {
-					this.folderPath = (e.target as HTMLInputElement).value;
-				});
+				this.renderFolderPicker(sourceFields, "Folder path", this.folderPath, (v) => { this.folderPath = v; });
 			} else if (this.sourceType === "files") {
 				const row = sourceFields.createDiv({ cls: "export-modal-row" });
 				row.createEl("label", { text: "Selected files" });
@@ -126,14 +130,8 @@ export class ExportModal extends Modal {
 			this.profile = profileSelect.value as ExportProfileId;
 		});
 
-		// Output folder
-		const folderRow = contentEl.createDiv({ cls: "export-modal-row" });
-		folderRow.createEl("label", { text: "Output folder" });
-		const folderInput = folderRow.createEl("input", { type: "text" });
-		folderInput.value = this.outputFolder;
-		folderInput.addEventListener("input", (e) => {
-			this.outputFolder = (e.target as HTMLInputElement).value;
-		});
+		// Output folder with browser
+		this.renderFolderPicker(contentEl, "Output folder", this.outputFolder, (v) => { this.outputFolder = v; });
 
 		// Sort mode
 		const sortRow = contentEl.createDiv({ cls: "export-modal-row" });
@@ -182,6 +180,29 @@ export class ExportModal extends Modal {
 		});
 	}
 
+	private renderFolderPicker(
+		container: HTMLElement,
+		label: string,
+		currentValue: string,
+		onChange: (value: string) => void,
+	): void {
+		const row = container.createDiv({ cls: "export-modal-folder-picker" });
+		row.createEl("label", { text: label });
+		const input = row.createEl("input", { type: "text", cls: "export-modal-folder-input" });
+		input.value = currentValue;
+		input.addEventListener("input", (e) => {
+			onChange((e.target as HTMLInputElement).value);
+		});
+		const browseBtn = row.createEl("button", { text: "Browse", cls: "export-modal-browse-btn" });
+		browseBtn.addEventListener("click", () => {
+			const picker = new FolderPickerModal(this.app, input.value, (selected) => {
+				input.value = selected;
+				onChange(selected);
+			});
+			picker.open();
+		});
+	}
+
 	private renderConfirmation(result: ExportModalResult): void {
 		const { contentEl } = this;
 		contentEl.empty();
@@ -214,7 +235,7 @@ export class ExportModal extends Modal {
 	private buildSource(): ExportSource {
 		switch (this.sourceType) {
 			case "current-file": {
-				const file = this.app.workspace.getActiveFile();
+				const file = this.preselectedFile ?? this.app.workspace.getActiveFile();
 				return { type: "current-file", path: file?.path ?? "" };
 			}
 			case "folder":
@@ -274,4 +295,37 @@ class FilePickerModal extends FuzzySuggestModal<TFile> {
 	onClose(): void {
 		this.onDone(Array.from(this.chosen));
 	}
+}
+
+class FolderPickerModal extends FuzzySuggestModal<TFolder> {
+	private onSelect: (path: string) => void;
+
+	constructor(app: App, currentPath: string, onSelect: (path: string) => void) {
+		super(app);
+		this.onSelect = onSelect;
+		this.setPlaceholder("Search folders...");
+		this.setInstructions([{ command: "Enter", purpose: "Select folder" }]);
+	}
+
+	getItems(): TFolder[] {
+		return getAllFolders(this.app.vault.getRoot());
+	}
+
+	getItemText(item: TFolder): string {
+		return item.path === "/" ? "/ (vault root)" : item.path;
+	}
+
+	onChooseItem(item: TFolder): void {
+		this.onSelect(item.path === "/" ? "" : item.path);
+	}
+}
+
+function getAllFolders(root: TFolder): TFolder[] {
+	const result: TFolder[] = [root];
+	for (const child of root.children) {
+		if (child instanceof TFolder) {
+			result.push(...getAllFolders(child));
+		}
+	}
+	return result;
 }
