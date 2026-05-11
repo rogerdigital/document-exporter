@@ -1,4 +1,4 @@
-import { App, Modal, TFile, TFolder, FuzzySuggestModal } from "obsidian";
+import { App, Modal, Platform, TFile, TFolder, FuzzySuggestModal } from "obsidian";
 import { ExportProfileId, ExportSettings, ExportSource, ExportSort } from "@/types";
 
 const PROFILE_OPTIONS: Record<ExportProfileId, string> = {
@@ -130,8 +130,8 @@ export class ExportModal extends Modal {
 			this.profile = profileSelect.value as ExportProfileId;
 		});
 
-		// Output folder with browser
-		this.renderFolderPicker(contentEl, "Output folder", this.outputFolder, (v) => { this.outputFolder = v; });
+		// Output folder with browser — supports both vault and system paths
+		this.renderOutputFolderPicker(contentEl);
 
 		// Sort mode
 		const sortRow = contentEl.createDiv({ cls: "export-modal-row" });
@@ -201,6 +201,53 @@ export class ExportModal extends Modal {
 			});
 			picker.open();
 		});
+	}
+
+	private renderOutputFolderPicker(container: HTMLElement): void {
+		const onChange = (v: string) => { this.outputFolder = v; };
+
+		const row = container.createDiv({ cls: "export-modal-folder-picker" });
+		row.createEl("label", { text: "Output folder" });
+		const input = row.createEl("input", {
+			type: "text",
+			cls: "export-modal-folder-input",
+			attr: { placeholder: "exports or /Users/you/Desktop/exports" },
+		});
+		input.value = this.outputFolder;
+		input.addEventListener("input", (e) => {
+			onChange((e.target as HTMLInputElement).value);
+		});
+
+		// Vault folder picker
+		const vaultBtn = row.createEl("button", { text: "Vault", cls: "export-modal-browse-btn" });
+		vaultBtn.addEventListener("click", () => {
+			const picker = new FolderPickerModal(this.app, input.value, (selected) => {
+				input.value = selected;
+				onChange(selected);
+			});
+			picker.open();
+		});
+
+		// System folder picker (desktop only)
+		if (Platform.isDesktopApp) {
+			const sysBtn = row.createEl("button", { text: "Choose...", cls: "export-modal-browse-btn" });
+			sysBtn.addEventListener("click", async () => {
+				try {
+					// @ts-ignore
+					const { dialog } = require("electron");
+					const result = await dialog.showOpenDialog({
+						properties: ["openDirectory", "createDirectory"],
+						title: "Select output folder",
+					});
+					if (!result.canceled && result.filePaths[0]) {
+						input.value = result.filePaths[0];
+						onChange(result.filePaths[0]);
+					}
+				} catch {
+					// Fallback: just let user type the path
+				}
+			});
+		}
 	}
 
 	private renderConfirmation(result: ExportModalResult): void {
