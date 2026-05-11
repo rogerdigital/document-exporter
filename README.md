@@ -2,13 +2,11 @@
 
 An Obsidian plugin for exporting notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.
 
-> **Status:** v0.1 — core export pipeline implemented, pending real-vault testing.
-
 ## Features
 
-- **Markdown Bundle** — combines selected notes into a single `document.md` with copied attachments and rewritten links
-- **HTML Document** — generates a standalone `index.html` with table of contents and linked assets
-- **Print-ready HTML** — produces HTML with print stylesheet for PDF output via browser print dialog
+- **Markdown Bundle** — combines selected notes into a single `.md` file with copied attachments and rewritten links
+- **HTML Document** — generates a standalone `.html` with table of contents and linked assets
+- **Print-ready HTML** — produces HTML with print stylesheet and hint banner for PDF output via browser print dialog
 
 ## How to Use
 
@@ -22,13 +20,16 @@ There are multiple ways to start an export:
 | **Right-click in editor** | Right-click inside a note → "Export current file" |
 | **Command palette** | `Cmd/Ctrl+P` → type "Export documents" |
 
-### Export Flow
+### Export Dialog
+
+![Export Dialog](docs/images/export-modal.png)
 
 1. Choose **source** (current file / folder / selected files / tag filter)
 2. Choose **format** (Markdown Bundle / HTML / Print-ready HTML)
-3. Choose **output folder** — type a path or click **Browse** to pick from your vault
-4. Click **Next** → review the summary → click **Export**
-5. A notification shows the output path when done
+3. Choose **output folder** — type a path, click **Vault** to pick from vault folders, or **Choose...** to pick a system folder (desktop only)
+4. Set **file name** — defaults to the source file or folder name
+5. Click **Next** → review the summary → click **Export**
+6. A notification shows the output path when done
 
 ## Examples
 
@@ -38,15 +39,15 @@ There are multiple ways to start an export:
 2. Right-click → **Export current file**
 3. Format: **Markdown Bundle**, Output: `exports`
 4. Click **Export**
-5. Result: `exports/document.md` + `exports/assets/` (if there are images)
+5. Result: `exports/<filename>.md` + `exports/assets/` (if there are images)
 
 ### Export a folder as HTML
 
 1. In the file explorer, right-click a folder (e.g. `projects/my-project`)
 2. Click **Export this folder**
-3. Format: **HTML Document**, Output: `exports`
+3. Format: **HTML Document**, Output: pick any folder
 4. Click **Export**
-5. Result: `exports/index.html` — open in a browser, all notes are combined with a table of contents
+5. Result: `<folder>/<filename>.html` — open in a browser, all notes are combined with a table of contents
 
 ### Export notes as a PDF
 
@@ -54,7 +55,7 @@ There are multiple ways to start an export:
 2. Source: select files or folder
 3. Format: **Print-ready HTML**
 4. Click **Export**
-5. Open `exports/index.html` in your browser
+5. Open the exported `.html` in your browser
 6. Press `Cmd/Ctrl+P` → Save as PDF
 
 ## Settings
@@ -94,10 +95,6 @@ npm run dev      # watch mode
 npm run build    # production build
 npm test         # run tests
 ```
-
-## Roadmap
-
-See [development plan](docs/plans/2026-05-10-document-exporter-development-plan.md) for milestones and future plans.
 
 ## License
 
