@@ -12,6 +12,7 @@ function makePlan(overrides: Partial<ExportPlan> = {}): ExportPlan {
 		source: { type: "current-file", path: "note.md" },
 		inputFiles: ["note.md"],
 		outputRoot: "exports",
+		outputFilename: "document",
 		outputFiles: ["exports/document.md"],
 		attachmentCopies: [],
 		sort: { mode: "path", direction: "asc" },
@@ -89,6 +90,7 @@ describe("ExportPlanBuilder", () => {
 			"markdown-bundle",
 			"exports",
 			defaultSort,
+			"document",
 		)
 			.setInputFiles(["note.md"])
 			.build();
@@ -104,6 +106,7 @@ describe("ExportPlanBuilder", () => {
 			"html-document",
 			"output",
 			defaultSort,
+			"index",
 		)
 			.setInputFiles(["note.md"])
 			.build();
@@ -119,6 +122,7 @@ describe("ExportPlanBuilder", () => {
 			"print-html",
 			"output",
 			defaultSort,
+			"index",
 		)
 			.setInputFiles(["note.md"])
 			.build();
@@ -134,6 +138,7 @@ describe("ExportPlanBuilder", () => {
 			"markdown-bundle",
 			"exports",
 			defaultSort,
+			"document",
 		)
 			.setInputFiles(["a.md", "b.md"])
 			.build();
@@ -141,7 +146,23 @@ describe("ExportPlanBuilder", () => {
 		expect(plan.source).toBe(defaultSource);
 		expect(plan.inputFiles).toEqual(["a.md", "b.md"]);
 		expect(plan.outputRoot).toBe("exports");
+		expect(plan.outputFilename).toBe("document");
 		expect(plan.sort).toBe(defaultSort);
 		expect(plan.attachmentCopies).toEqual([]);
+	});
+
+	it("strips extension from custom filename", () => {
+		const plan = new ExportPlanBuilder(
+			mockApp,
+			defaultSource,
+			"markdown-bundle",
+			"exports",
+			defaultSort,
+			"my-note.md",
+		)
+			.setInputFiles(["note.md"])
+			.build();
+
+		expect(plan.outputFiles).toEqual(["exports/my-note.md"]);
 	});
 });

@@ -88,6 +88,7 @@ export default class DocumentExporterPlugin extends Plugin {
 				result.profile,
 				result.outputFolder,
 				result.sort,
+				result.outputFilename,
 			)
 				.setInputFiles(files.map((f) => f.path))
 				.build();
