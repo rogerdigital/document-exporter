@@ -1,11 +1,10 @@
-import { Plugin, Notice } from "obsidian";
+import { Plugin, Notice, TFile, TFolder, Menu } from "obsidian";
 import { ExportSettings } from "@/types";
 import { loadSettings, saveSettings } from "@/settings/settings";
 import { DocumentExporterSettingTab } from "@/settings/settings-tab";
-import { ExportModal } from "@/ui/ExportModal";
-import { ExportModalResult } from "@/ui/ExportModal";
+import { ExportModal, ExportModalResult } from "@/ui/ExportModal";
 import { ExportSourceResolver } from "@/export/ExportSourceResolver";
-import { ExportPlanBuilder, validatePlan, summarizePlan } from "@/export/ExportPlan";
+import { ExportPlanBuilder, validatePlan } from "@/export/ExportPlan";
 import { ExportRunner } from "@/export/ExportRunner";
 import { ProgressNotice } from "@/ui/ProgressNotice";
 
@@ -15,11 +14,48 @@ export default class DocumentExporterPlugin extends Plugin {
 	async onload() {
 		this.settings = await loadSettings(this);
 
+		// Ribbon icon
+		this.addRibbonIcon("file-output", "Export documents", () => {
+			this.openExportModal();
+		});
+
+		// Command palette
 		this.addCommand({
 			id: "export-documents",
 			name: "Export documents",
 			callback: () => this.openExportModal(),
 		});
+
+		// File explorer context menu — right-click on file
+		this.registerEvent(
+			this.app.workspace.on("file-menu", (menu: Menu, file) => {
+				if (file instanceof TFile && file.extension === "md") {
+					menu.addItem((item) => {
+						item.setTitle("Export this file")
+							.setIcon("file-output")
+							.onClick(() => this.openExportModal(file, undefined));
+					});
+				}
+				if (file instanceof TFolder) {
+					menu.addItem((item) => {
+						item.setTitle("Export this folder")
+							.setIcon("file-output")
+							.onClick(() => this.openExportModal(undefined, file));
+					});
+				}
+			}),
+		);
+
+		// Editor context menu — right-click in editor
+		this.registerEvent(
+			this.app.workspace.on("editor-menu", (menu: Menu) => {
+				menu.addItem((item) => {
+					item.setTitle("Export current file")
+						.setIcon("file-output")
+						.onClick(() => this.openExportModal());
+				});
+			}),
+		);
 
 		this.addSettingTab(new DocumentExporterSettingTab(this.app, this));
 	}
@@ -30,12 +66,11 @@ export default class DocumentExporterPlugin extends Plugin {
 		await saveSettings(this, this.settings);
 	}
 
-	private async openExportModal() {
-		const modal = new ExportModal(this.app, this.settings);
-		const result = await modal.openForResult();
-		if (!result) return;
-
-		await this.executeExport(result);
+	private openExportModal(preselectedFile?: TFile, preselectedFolder?: TFolder) {
+		const modal = new ExportModal(this.app, this.settings, preselectedFile, preselectedFolder);
+		modal.openForResult().then((result) => {
+			if (result) this.executeExport(result);
+		});
 	}
 
 	private async executeExport(result: ExportModalResult) {
@@ -43,12 +78,10 @@ export default class DocumentExporterPlugin extends Plugin {
 		progress.start(4);
 
 		try {
-			// Step 1: Resolve source files
 			const resolver = new ExportSourceResolver(this.app);
 			const files = await resolver.resolve(result.source, result.sort);
 			progress.increment();
 
-			// Step 2: Build plan
 			const plan = new ExportPlanBuilder(
 				this.app,
 				result.source,
@@ -66,12 +99,8 @@ export default class DocumentExporterPlugin extends Plugin {
 			}
 			progress.increment();
 
-			// Step 3: Run export
 			const runner = new ExportRunner(this.app);
-			const exportResult = await runner.run(
-				plan,
-				this.settings,
-			);
+			const exportResult = await runner.run(plan, this.settings);
 			progress.increment();
 
 			if (exportResult.success) {
@@ -80,9 +109,7 @@ export default class DocumentExporterPlugin extends Plugin {
 					: `Export complete: ${exportResult.outputRoot}`;
 				progress.finish(msg);
 			} else {
-				progress.finish(
-					`Export failed: ${exportResult.warnings.join(", ")}`,
-				);
+				progress.finish(`Export failed: ${exportResult.warnings.join(", ")}`);
 			}
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
