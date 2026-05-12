@@ -3,8 +3,8 @@ import { ExportProfileId, ExportSort } from "@/types";
 import type DocumentExporterPlugin from "@/main";
 
 const PROFILE_LABELS: Record<ExportProfileId, string> = {
-	"markdown-bundle": "Markdown Bundle",
-	"html-document": "HTML Document",
+	"markdown-bundle": "Markdown bundle",
+	"html-document": "HTML document",
 	"print-html": "Print-ready HTML",
 };
 
@@ -26,7 +26,7 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName("Document Exporter").setHeading();
+		new Setting(containerEl).setName("General").setHeading();
 
 		// Output folder — most important setting, shown first
 		new Setting(containerEl)

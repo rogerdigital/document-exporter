@@ -65,8 +65,7 @@ describe("AttachmentCollector", () => {
 		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{ "notes/a.md": [{ link: "image.png" }] },
-		) as unknown as Parameters<typeof AttachmentCollector.prototype["collect"]> extends (files: infer F) => unknown ? { vault: unknown; metadataCache: unknown } : never;
-
+		);
 		const collector = new AttachmentCollector(app as never, new Set());
 		const result = await collector.collect([mockFile as never]);
 
@@ -78,8 +77,7 @@ describe("AttachmentCollector", () => {
 		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{ "notes/a.md": [{ link: "image.png" }, { link: "image.png" }] },
-		) as unknown as { vault: unknown; metadataCache: unknown };
-
+		);
 		const collector = new AttachmentCollector(app as never, new Set());
 		const result = await collector.collect([mockFile as never]);
 
@@ -90,8 +88,7 @@ describe("AttachmentCollector", () => {
 		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{ "notes/a.md": [{ link: "Note" }] },
-		) as unknown as { vault: unknown; metadataCache: unknown };
-
+		);
 		const collector = new AttachmentCollector(app as never, new Set());
 		const result = await collector.collect([mockFile as never]);
 
@@ -104,8 +101,7 @@ describe("AttachmentCollector", () => {
 			{},
 			{},
 			{ "notes/a.md": "![alt](missing-image.png)" },
-		) as unknown as { vault: unknown; metadataCache: unknown };
-
+		);
 		const collector = new AttachmentCollector(app as never, new Set());
 		const result = await collector.collect([mockFile as never]);
 
@@ -119,8 +115,7 @@ describe("AttachmentCollector", () => {
 			{},
 			{},
 			{ "notes/a.md": "![alt](https://example.com/image.png)" },
-		) as unknown as { vault: unknown; metadataCache: unknown };
-
+		);
 		const collector = new AttachmentCollector(app as never, new Set());
 		const result = await collector.collect([mockFile as never]);
 
@@ -132,8 +127,7 @@ describe("AttachmentCollector", () => {
 		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{ "notes/a.md": [{ link: "image.png" }] },
-		) as unknown as { vault: unknown; metadataCache: unknown };
-
+		);
 		const exportedPaths = new Set(["assets/image.png"]);
 		const collector = new AttachmentCollector(app as never, exportedPaths);
 		const result = await collector.collect([mockFile as never]);
