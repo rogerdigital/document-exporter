@@ -54,7 +54,7 @@ describe("deriveTitle", () => {
 		basename: "test",
 		extension: "md",
 		name: "test.md",
-	} as any;
+	} as unknown as Parameters<typeof deriveTitle>[0];
 
 	it("uses frontmatter title when present", () => {
 		const result = deriveTitle(mockFile, { title: "My Title" }, "body");

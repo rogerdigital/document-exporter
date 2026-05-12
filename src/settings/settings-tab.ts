@@ -1,5 +1,5 @@
 import { PluginSettingTab, App, Setting } from "obsidian";
-import { ExportSettings, ExportProfileId, ExportSort } from "@/types";
+import { ExportProfileId, ExportSort } from "@/types";
 import type DocumentExporterPlugin from "@/main";
 
 const PROFILE_LABELS: Record<ExportProfileId, string> = {
@@ -26,7 +26,7 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Document Exporter" });
+		new Setting(containerEl).setName("Document Exporter").setHeading();
 
 		// Output folder — most important setting, shown first
 		new Setting(containerEl)
@@ -65,7 +65,7 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 				});
 			});
 
-		containerEl.createEl("h3", { text: "Advanced" });
+		new Setting(containerEl).setName("Advanced").setHeading();
 
 		new Setting(containerEl)
 			.setName("Include source path comments")

@@ -4,7 +4,7 @@ import {
 	summarizePlan,
 	ExportPlanBuilder,
 } from "@/export/ExportPlan";
-import { ExportPlan, ExportProfileId, ExportSort, ExportSource } from "@/types";
+import { ExportPlan, ExportSort, ExportSource } from "@/types";
 
 function makePlan(overrides: Partial<ExportPlan> = {}): ExportPlan {
 	return {
@@ -78,7 +78,7 @@ describe("ExportPlanBuilder", () => {
 		metadataCache: {
 			getFirstLinkpathDest: vi.fn(),
 		},
-	} as any;
+	} as unknown as ConstructorParameters<typeof ExportPlanBuilder>[0];
 
 	const defaultSource: ExportSource = { type: "current-file", path: "note.md" };
 	const defaultSort: ExportSort = { mode: "path", direction: "asc" };

@@ -1,4 +1,4 @@
-import { AssembledDocument, AttachmentCopy, ExportPlan } from "@/types";
+import { AssembledDocument, ExportPlan } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
 
 export async function renderMarkdownBundle(
