@@ -1,5 +1,5 @@
-import { App, TFile, MetadataCache, Vault } from "obsidian";
-import { AssembledDocument, DocumentSection, AttachmentCopy } from "@/types";
+import { App, TFile } from "obsidian";
+import { AssembledDocument, DocumentSection } from "@/types";
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/m;
 

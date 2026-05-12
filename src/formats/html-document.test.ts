@@ -86,15 +86,22 @@ describe("HTML Document rendering", () => {
 
 function createTestWriter(writtenFiles: string[]) {
 	return {
-		ensureFolder: vi.fn(async (path: string) => { writtenFiles.push(path); }),
-		writeText: vi.fn(async (path: string, content: string) => { writtenFiles.push(path); }),
-		copyBinaryFile: vi.fn(async (src: string, dest: string) => { writtenFiles.push(dest); }),
-		folderExists: vi.fn(async () => false),
-		timestampedFolder: vi.fn(async (base: string) => `${base}-ts`),
+		ensureFolder: vi.fn((path: string) => { writtenFiles.push(path); return Promise.resolve(); }),
+		writeText: vi.fn((path: string, content: string) => { writtenFiles.push(path); return Promise.resolve(); }),
+		copyBinaryFile: vi.fn((src: string, dest: string) => { writtenFiles.push(dest); return Promise.resolve(); }),
+		folderExists: vi.fn(() => Promise.resolve(false)),
+		timestampedFolder: vi.fn((base: string) => Promise.resolve(`${base}-ts`)),
 	};
 }
 
-async function renderTestHtml(sections: any[], printReady = false) {
+interface TestSection {
+	sourcePath: string;
+	title: string;
+	markdown: string;
+	frontmatter: Record<string, unknown>;
+}
+
+async function renderTestHtml(sections: TestSection[], printReady = false) {
 	const writtenFiles: string[] = [];
 	const writer = createTestWriter(writtenFiles);
 
@@ -107,16 +114,21 @@ async function renderTestHtml(sections: any[], printReady = false) {
 
 	await invokeRenderHtml(doc, plan, writer, printReady);
 
-	const writeCall = (writer.writeText as any).mock.calls.find(
-		(c: string[]) => c[0].endsWith(".html"),
+	const writeCall = (writer.writeText as unknown as { mock: { calls: string[][] } }).mock.calls.find(
+		(c) => c[0].endsWith(".html"),
 	);
 	const html = writeCall ? writeCall[1] : "";
 
 	return { html, writtenFiles };
 }
 
-async function invokeRenderHtml(doc: any, plan: any, writer: any, printReady = false) {
+async function invokeRenderHtml(
+	doc: { title: string; sections: TestSection[]; attachments: { sourcePath: string; outputRelativePath: string }[] },
+	plan: { outputRoot: string; outputFilename: string; profile: "html-document" },
+	writer: ReturnType<typeof createTestWriter>,
+	printReady = false,
+) {
 	// Inline the import to avoid circular issues
 	const mod = await import("@/formats/html-document");
-	return mod.renderHtmlDocument(doc, plan, writer, printReady);
+	return mod.renderHtmlDocument(doc, plan as unknown as Parameters<typeof mod.renderHtmlDocument>[1], writer as unknown as Parameters<typeof mod.renderHtmlDocument>[2], printReady);
 }
