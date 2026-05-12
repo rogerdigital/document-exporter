@@ -71,7 +71,7 @@ export class ExportModal extends Modal {
 	private renderForm(): void {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: "Export Documents" });
+		contentEl.createEl("h2", { text: "Export documents" });
 
 		// Source type
 		const sourceRow = contentEl.createDiv({ cls: "export-modal-row" });
@@ -246,22 +246,25 @@ export class ExportModal extends Modal {
 		// System folder picker (desktop only)
 		if (Platform.isDesktopApp) {
 			const sysBtn = row.createEl("button", { text: "Choose...", cls: "export-modal-browse-btn" });
-			sysBtn.addEventListener("click", async () => {
-				try {
-					const electron = (window as any).require("electron");
-					const dialog = electron.remote?.dialog ?? electron.dialog;
-					if (!dialog) return;
-					const result = await dialog.showOpenDialog({
-						properties: ["openDirectory", "createDirectory"],
-						title: "Select output folder",
-					});
-					if (!result.canceled && result.filePaths[0]) {
-						input.value = result.filePaths[0];
-						onChange(result.filePaths[0]);
+			sysBtn.addEventListener("click", () => {
+				void (async () => {
+					try {
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						const electron = (window as any).require("electron");
+						const dialog = electron?.remote?.dialog ?? electron?.dialog;
+						if (!dialog) return;
+						const result = await dialog.showOpenDialog({
+							properties: ["openDirectory", "createDirectory"],
+							title: "Select output folder",
+						});
+						if (!result.canceled && result.filePaths[0]) {
+							input.value = result.filePaths[0];
+							onChange(result.filePaths[0]);
+						}
+					} catch (err) {
+						console.error("Document Exporter: failed to open folder dialog", err);
 					}
-				} catch (err) {
-					console.error("Document Exporter: failed to open folder dialog", err);
-				}
+				})();
 			});
 		}
 	}
@@ -269,13 +272,14 @@ export class ExportModal extends Modal {
 	private renderConfirmation(result: ExportModalResult): void {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: "Confirm Export" });
+		contentEl.createEl("h2", { text: "Confirm export" });
 
 		const summary = contentEl.createDiv({ cls: "export-confirm-summary" });
 		summary.createEl("p", { text: `Format: ${PROFILE_OPTIONS[result.profile]}` });
 		summary.createEl("p", { text: `Output: ${result.outputFolder}/${result.outputFilename}` });
 		summary.createEl("p", { text: `Source: ${SOURCE_OPTIONS[result.source.type]}` });
 		summary.createEl("p", { text: `Sort: ${result.sort.mode} (${result.sort.direction})` });
+
 
 		if (result.source.type === "folder") {
 			summary.createEl("p", { text: `Folder: ${result.source.path} (recursive: ${result.source.recursive})` });

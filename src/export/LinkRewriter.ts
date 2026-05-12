@@ -1,4 +1,4 @@
-import { App, TFile } from "obsidian";
+import { App } from "obsidian";
 import { ExportProfileId, AttachmentCopy } from "@/types";
 
 const WIKI_LINK_RE = /\[\[([^\]]+)]]/g;

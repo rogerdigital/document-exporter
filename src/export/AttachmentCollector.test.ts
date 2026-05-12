@@ -1,8 +1,26 @@
 import { describe, it, expect, vi } from "vitest";
 import { AttachmentCollector } from "@/export/AttachmentCollector";
 
-function createMockApp(embedResults: Record<string, any[]> = {}, linkResults: Record<string, any[]> = {}, fileContents: Record<string, string> = {}) {
-	const allFiles = new Map<string, any>();
+interface MockFile {
+	path: string;
+	extension: string;
+	name: string;
+}
+
+interface MockEmbed {
+	link: string;
+}
+
+interface MockLink {
+	link: string;
+}
+
+function createMockApp(
+	embedResults: Record<string, MockEmbed[]> = {},
+	linkResults: Record<string, MockLink[]> = {},
+	fileContents: Record<string, string> = {},
+) {
+	const allFiles = new Map<string, MockFile>();
 
 	for (const [path, ext] of Object.entries({
 		"assets/image.png": "png",
@@ -15,10 +33,10 @@ function createMockApp(embedResults: Record<string, any[]> = {}, linkResults: Re
 	return {
 		vault: {
 			getAbstractFileByPath: vi.fn((path: string) => allFiles.get(path) ?? null),
-			read: vi.fn((file: any) => fileContents[file.path] ?? ""),
+			read: vi.fn((file: MockFile) => fileContents[file.path] ?? ""),
 		},
 		metadataCache: {
-			getFileCache: vi.fn((file: any) => {
+			getFileCache: vi.fn((file: MockFile) => {
 				const embeds = embedResults[file.path];
 				const links = linkResults[file.path];
 				return {
@@ -44,81 +62,81 @@ function createMockApp(embedResults: Record<string, any[]> = {}, linkResults: Re
 
 describe("AttachmentCollector", () => {
 	it("collects wiki embeds from metadata cache", async () => {
-		const mockFile = { path: "notes/a.md", extension: "md" };
+		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{ "notes/a.md": [{ link: "image.png" }] },
-		) as any;
+		) as unknown as Parameters<typeof AttachmentCollector.prototype["collect"]> extends (files: infer F) => unknown ? { vault: unknown; metadataCache: unknown } : never;
 
-		const collector = new AttachmentCollector(app, new Set());
-		const result = await collector.collect([mockFile as any]);
+		const collector = new AttachmentCollector(app as never, new Set());
+		const result = await collector.collect([mockFile as never]);
 
 		expect(result.attachments).toHaveLength(1);
 		expect(result.attachments[0].sourcePath).toBe("assets/image.png");
 	});
 
 	it("deduplicates attachments", async () => {
-		const mockFile = { path: "notes/a.md", extension: "md" };
+		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{ "notes/a.md": [{ link: "image.png" }, { link: "image.png" }] },
-		) as any;
+		) as unknown as { vault: unknown; metadataCache: unknown };
 
-		const collector = new AttachmentCollector(app, new Set());
-		const result = await collector.collect([mockFile as any]);
+		const collector = new AttachmentCollector(app as never, new Set());
+		const result = await collector.collect([mockFile as never]);
 
 		expect(result.attachments).toHaveLength(1);
 	});
 
 	it("skips markdown files as attachments", async () => {
-		const mockFile = { path: "notes/a.md", extension: "md" };
+		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{ "notes/a.md": [{ link: "Note" }] },
-		) as any;
+		) as unknown as { vault: unknown; metadataCache: unknown };
 
-		const collector = new AttachmentCollector(app, new Set());
-		const result = await collector.collect([mockFile as any]);
+		const collector = new AttachmentCollector(app as never, new Set());
+		const result = await collector.collect([mockFile as never]);
 
 		expect(result.attachments).toHaveLength(0);
 	});
 
 	it("warns on missing markdown image links", async () => {
-		const mockFile = { path: "notes/a.md", extension: "md" };
+		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{},
 			{},
 			{ "notes/a.md": "![alt](missing-image.png)" },
-		) as any;
+		) as unknown as { vault: unknown; metadataCache: unknown };
 
-		const collector = new AttachmentCollector(app, new Set());
-		const result = await collector.collect([mockFile as any]);
+		const collector = new AttachmentCollector(app as never, new Set());
+		const result = await collector.collect([mockFile as never]);
 
 		expect(result.warnings.length).toBeGreaterThan(0);
 		expect(result.warnings[0]).toContain("missing-image.png");
 	});
 
 	it("ignores external URLs", async () => {
-		const mockFile = { path: "notes/a.md", extension: "md" };
+		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{},
 			{},
 			{ "notes/a.md": "![alt](https://example.com/image.png)" },
-		) as any;
+		) as unknown as { vault: unknown; metadataCache: unknown };
 
-		const collector = new AttachmentCollector(app, new Set());
-		const result = await collector.collect([mockFile as any]);
+		const collector = new AttachmentCollector(app as never, new Set());
+		const result = await collector.collect([mockFile as never]);
 
 		expect(result.attachments).toHaveLength(0);
 		expect(result.warnings).toHaveLength(0);
 	});
 
 	it("skips exported paths", async () => {
-		const mockFile = { path: "notes/a.md", extension: "md" };
+		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
 			{ "notes/a.md": [{ link: "image.png" }] },
-		) as any;
+		) as unknown as { vault: unknown; metadataCache: unknown };
 
 		const exportedPaths = new Set(["assets/image.png"]);
-		const collector = new AttachmentCollector(app, exportedPaths);
-		const result = await collector.collect([mockFile as any]);
+		const collector = new AttachmentCollector(app as never, exportedPaths);
+		const result = await collector.collect([mockFile as never]);
 
 		expect(result.attachments).toHaveLength(0);
 	});

@@ -25,7 +25,7 @@ function createMockApp() {
 				return known.includes(path) ? { path } : null;
 			}),
 		},
-	} as any;
+	} as unknown as ConstructorParameters<typeof LinkRewriter>[0];
 }
 
 describe("LinkRewriter", () => {

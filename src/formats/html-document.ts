@@ -1,4 +1,4 @@
-import { AssembledDocument, AttachmentCopy, ExportPlan, DocumentSection } from "@/types";
+import { AssembledDocument, ExportPlan, DocumentSection } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
 
 export async function renderHtmlDocument(

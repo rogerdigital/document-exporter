@@ -1,4 +1,4 @@
-import { Plugin, Notice, TFile, TFolder, Menu } from "obsidian";
+import { Plugin, TFile, TFolder, Menu } from "obsidian";
 import { ExportSettings } from "@/types";
 import { loadSettings, saveSettings } from "@/settings/settings";
 import { DocumentExporterSettingTab } from "@/settings/settings-tab";
@@ -68,8 +68,8 @@ export default class DocumentExporterPlugin extends Plugin {
 
 	private openExportModal(preselectedFile?: TFile, preselectedFolder?: TFolder) {
 		const modal = new ExportModal(this.app, this.settings, preselectedFile, preselectedFolder);
-		modal.openForResult().then((result) => {
-			if (result) this.executeExport(result);
+		void modal.openForResult().then((result) => {
+			if (result) void this.executeExport(result);
 		});
 	}
 

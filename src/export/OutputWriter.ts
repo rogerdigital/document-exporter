@@ -1,6 +1,10 @@
-import { App, TFile, TFolder, TAbstractFile, FileSystemAdapter } from "obsidian";
-import * as fs from "fs";
-import * as path from "path";
+import { App, TFile, FileSystemAdapter } from "obsidian";
+
+/* eslint-disable @typescript-eslint/no-var-requires */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+const fs = typeof require !== "undefined" ? require("fs") : null;
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+const path = typeof require !== "undefined" ? require("path") : null;
 
 export class OutputWriter {
 	private app: App;
@@ -13,7 +17,7 @@ export class OutputWriter {
 
 	async ensureFolder(folderPath: string): Promise<void> {
 		if (this.isExternal(folderPath)) {
-			fs.mkdirSync(folderPath, { recursive: true });
+			fs?.mkdirSync(folderPath, { recursive: true });
 			return;
 		}
 
@@ -30,7 +34,7 @@ export class OutputWriter {
 
 	async writeText(filePath: string, content: string): Promise<void> {
 		if (this.isExternal(filePath)) {
-			fs.writeFileSync(filePath, content, "utf-8");
+			fs?.writeFileSync(filePath, content, "utf-8");
 			return;
 		}
 
@@ -44,8 +48,8 @@ export class OutputWriter {
 
 	async copyBinaryFile(sourcePath: string, destPath: string): Promise<void> {
 		// Source is always vault-internal
-		const absSource = path.join(this.vaultRoot, sourcePath);
-		if (!fs.existsSync(absSource)) return;
+		const absSource = path?.join(this.vaultRoot, sourcePath) ?? sourcePath;
+		if (!fs?.existsSync(absSource)) return;
 
 		const content = fs.readFileSync(absSource);
 
@@ -61,27 +65,27 @@ export class OutputWriter {
 		}
 	}
 
-	async folderExists(folderPath: string): Promise<boolean> {
+	folderExists(folderPath: string): boolean {
 		if (this.isExternal(folderPath)) {
-			return fs.existsSync(folderPath);
+			return fs?.existsSync(folderPath) ?? false;
 		}
 		const folder = this.app.vault.getAbstractFileByPath(folderPath);
 		return folder !== null && "children" in folder;
 	}
 
-	async timestampedFolder(basePath: string): Promise<string> {
+	timestampedFolder(basePath: string): string {
 		const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 		return `${basePath}-${ts}`;
 	}
 
-	async isFolderEmpty(folderPath: string): Promise<boolean> {
+	isFolderEmpty(folderPath: string): boolean {
 		if (this.isExternal(folderPath)) {
-			const entries = fs.readdirSync(folderPath);
+			const entries = fs?.readdirSync(folderPath) ?? [];
 			return entries.length === 0;
 		}
 		const folder = this.app.vault.getAbstractFileByPath(folderPath);
 		if (!folder || !("children" in folder)) return true;
-		return (folder as any).children.length === 0;
+		return (folder as { children: unknown[] }).children.length === 0;
 	}
 
 	isExternal(p: string): boolean {
@@ -92,7 +96,7 @@ export class OutputWriter {
 
 	private resolveVaultRoot(): string {
 		if (this.app.vault.adapter instanceof FileSystemAdapter) {
-			return (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+			return this.app.vault.adapter.getBasePath();
 		}
 		return "";
 	}
