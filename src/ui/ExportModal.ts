@@ -2,8 +2,8 @@ import { App, Modal, Platform, TFile, TFolder, FuzzySuggestModal } from "obsidia
 import { ExportProfileId, ExportSettings, ExportSource, ExportSort } from "@/types";
 
 const PROFILE_OPTIONS: Record<ExportProfileId, string> = {
-	"markdown-bundle": "Markdown Bundle",
-	"html-document": "HTML Document",
+	"markdown-bundle": "Markdown bundle",
+	"html-document": "HTML document",
 	"print-html": "Print-ready HTML",
 };
 
@@ -249,8 +249,9 @@ export class ExportModal extends Modal {
 			sysBtn.addEventListener("click", () => {
 				void (async () => {
 					try {
-						// eslint-disable-next-line @typescript-eslint/no-explicit-any
-						const electron = (window as any).require("electron");
+						const electron = typeof globalThis !== "undefined" && "require" in globalThis
+							? (globalThis as unknown as Record<string, (id: string) => unknown>)["require"]("electron") as { remote?: { dialog?: { showOpenDialog: (opts: unknown) => Promise<{ canceled: boolean; filePaths: string[] }> } }; dialog?: { showOpenDialog: (opts: unknown) => Promise<{ canceled: boolean; filePaths: string[] }> } } | undefined
+							: undefined;
 						const dialog = electron?.remote?.dialog ?? electron?.dialog;
 						if (!dialog) return;
 						const result = await dialog.showOpenDialog({
