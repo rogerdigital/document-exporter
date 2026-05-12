@@ -4,7 +4,7 @@ describe("print-html", () => {
 	it("delegates to renderHtmlDocument with printReady=true", async () => {
 		const writer = {
 			ensureFolder: vi.fn(),
-			writeText: vi.fn(async (_path: string, content: string) => { return content; }),
+			writeText: vi.fn((path: string, content: string) => Promise.resolve(content)),
 			copyBinaryFile: vi.fn(),
 			folderExists: vi.fn(),
 			timestampedFolder: vi.fn(),
@@ -27,7 +27,7 @@ describe("print-html", () => {
 		};
 
 		const mod = await import("@/formats/print-html");
-		const result = await mod.renderPrintHtml(doc, plan, writer as any);
+		const result = await mod.renderPrintHtml(doc, plan, writer as unknown as Parameters<typeof mod.renderPrintHtml>[2]);
 		expect(result).toEqual([]);
 
 		// Verify the HTML output contains print-specific CSS

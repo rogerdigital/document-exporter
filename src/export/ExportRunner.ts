@@ -1,4 +1,4 @@
-import { App, Notice } from "obsidian";
+import { App } from "obsidian";
 import { ExportPlan, ExportSettings } from "@/types";
 import { DocumentAssembler } from "@/export/DocumentAssembler";
 import { AttachmentCollector } from "@/export/AttachmentCollector";

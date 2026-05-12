@@ -1,4 +1,4 @@
-import { ExportPlan, ExportProfileId, ExportSource, ExportSort, AttachmentCopy } from "@/types";
+import { ExportPlan, ExportProfileId, ExportSource, ExportSort } from "@/types";
 import { App } from "obsidian";
 
 export class ExportPlanBuilder {

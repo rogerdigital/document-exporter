@@ -22,7 +22,7 @@ export class ExportSourceResolver {
 		return sorted;
 	}
 
-	private async collectFiles(source: ExportSource): Promise<TFile[]> {
+	private collectFiles(source: ExportSource): TFile[] {
 		switch (source.type) {
 			case "current-file":
 				return this.resolveCurrentFile(source.path);
@@ -37,9 +37,9 @@ export class ExportSourceResolver {
 
 	private resolveCurrentFile(path: string): TFile[] {
 		if (!path) return [];
-		const file = this.app.vault.getAbstractFileByPath(path) as TAbstractFile | null;
+		const file = this.app.vault.getAbstractFileByPath(path);
 		if (isTFile(file) && file.extension === "md") {
-			return [file as TFile];
+			return [file];
 		}
 		return [];
 	}
@@ -47,29 +47,29 @@ export class ExportSourceResolver {
 	private resolveFiles(paths: string[]): TFile[] {
 		const files: TFile[] = [];
 		for (const path of paths) {
-			const file = this.app.vault.getAbstractFileByPath(path) as TAbstractFile | null;
+			const file = this.app.vault.getAbstractFileByPath(path);
 			if (isTFile(file) && file.extension === "md") {
-				files.push(file as TFile);
+				files.push(file);
 			}
 		}
 		return files;
 	}
 
 	private resolveFolder(folderPath: string, recursive: boolean): TFile[] {
-		const folder = this.app.vault.getAbstractFileByPath(folderPath) as TAbstractFile | null;
+		const folder = this.app.vault.getAbstractFileByPath(folderPath);
 		if (!isTFolder(folder)) return [];
 
-		return this.collectMarkdownFiles(folder as TFolder, recursive);
+		return this.collectMarkdownFiles(folder, recursive);
 	}
 
 	private collectMarkdownFiles(folder: TFolder, recursive: boolean): TFile[] {
 		const files: TFile[] = [];
 
 		for (const child of folder.children) {
-			if (isTFile(child) && (child as TFile).extension === "md") {
-				files.push(child as TFile);
+			if (isTFile(child) && child.extension === "md") {
+				files.push(child);
 			} else if (recursive && isTFolder(child)) {
-				files.push(...this.collectMarkdownFiles(child as TFolder, true));
+				files.push(...this.collectMarkdownFiles(child, true));
 			}
 		}
 
@@ -115,7 +115,8 @@ export class ExportSourceResolver {
 					const key = sort.frontmatterKey ?? "title";
 					const aVal = this.getFrontmatterValue(a, key);
 					const bVal = this.getFrontmatterValue(b, key);
-					result = String(aVal ?? "").localeCompare(String(bVal ?? ""));
+					const toStr = (v: unknown) => v != null ? (typeof v === "string" ? v : JSON.stringify(v)) : "";
+					result = toStr(aVal).localeCompare(toStr(bVal));
 					break;
 				}
 			}
