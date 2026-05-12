@@ -27,7 +27,7 @@ describe("print-html", () => {
 		};
 
 		const mod = await import("@/formats/print-html");
-		const result = await mod.renderPrintHtml(doc, plan, writer as unknown as Parameters<typeof mod.renderPrintHtml>[2]);
+		const result = await mod.renderPrintHtml(doc, plan, writer as never);
 		expect(result).toEqual([]);
 
 		// Verify the HTML output contains print-specific CSS
