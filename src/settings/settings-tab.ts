@@ -26,14 +26,12 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName("General").setHeading();
-
 		// Output folder — most important setting, shown first
 		new Setting(containerEl)
 			.setName("Output folder")
 			.setDesc("Exported files will be saved here (relative to vault root). You can change this path to any folder in your vault.")
 			.addText((text) => {
-				text.setPlaceholder("exports");
+				text.setPlaceholder("Exports");
 				text.setValue(this.plugin.settings.defaultOutputFolder);
 				text.onChange(async (v) => {
 					this.plugin.settings.defaultOutputFolder = v;
