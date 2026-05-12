@@ -16,7 +16,7 @@ export class ExportSourceResolver {
 		this.app = app;
 	}
 
-	async resolve(source: ExportSource, sort: ExportSort): Promise<TFile[]> {
+	resolve(source: ExportSource, sort: ExportSort): TFile[] {
 		const files = this.collectFiles(source);
 		const sorted = this.sortFiles(files, sort);
 		return sorted;
