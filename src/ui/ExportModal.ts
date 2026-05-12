@@ -106,7 +106,7 @@ export class ExportModal extends Modal {
 			} else if (this.sourceType === "filter") {
 				const row = sourceFields.createDiv({ cls: "export-modal-row" });
 				row.createEl("label", { text: "Tag" });
-				const input = row.createEl("input", { type: "text", attr: { placeholder: "project" } });
+				const input = row.createEl("input", { type: "text", attr: { placeholder: "Project" } });
 				input.value = this.filterTag;
 				input.addEventListener("input", (e) => {
 					this.filterTag = (e.target as HTMLInputElement).value;
@@ -141,7 +141,7 @@ export class ExportModal extends Modal {
 		filenameRow.createEl("label", { text: "File name" });
 		const filenameInput = filenameRow.createEl("input", {
 			type: "text",
-			attr: { placeholder: "document" },
+			attr: { placeholder: "Document" },
 		});
 		filenameInput.value = this.outputFilename;
 		filenameInput.addEventListener("input", (e) => {
@@ -171,7 +171,7 @@ export class ExportModal extends Modal {
 				row.createEl("label", { text: "Frontmatter key" });
 				const input = row.createEl("input", {
 					type: "text",
-					attr: { placeholder: "title" },
+					attr: { placeholder: "Title" },
 				});
 				input.value = this.sort.frontmatterKey ?? "";
 				input.addEventListener("input", (e) => {
@@ -226,7 +226,7 @@ export class ExportModal extends Modal {
 		const input = row.createEl("input", {
 			type: "text",
 			cls: "export-modal-folder-input",
-			attr: { placeholder: "exports or /Users/you/Desktop/exports" },
+			attr: { placeholder: "Exports or /Users/you/Desktop/exports" },
 		});
 		input.value = this.outputFolder;
 		input.addEventListener("input", (e) => {

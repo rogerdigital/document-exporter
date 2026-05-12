@@ -114,7 +114,6 @@ async function renderTestHtml(sections: TestSection[], printReady = false) {
 
 	await invokeRenderHtml(doc, plan, writer, printReady);
 
-	// eslint-disable-next-line -- accessing vitest mock.calls requires type override
 	const writeCall = (writer.writeText as unknown as { mock: { calls: string[][] } }).mock.calls.find(
 		(c) => c[0].endsWith(".html"),
 	);
