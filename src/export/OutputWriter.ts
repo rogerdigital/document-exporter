@@ -1,12 +1,8 @@
 import { App, TFile, FileSystemAdapter } from "obsidian";
 
-// Use globalThis.require to access Node.js modules on desktop (Electron).
-// This avoids static import detection by the Obsidian eslint plugin.
-// eslint-disable-next-line -- Node.js fs module needed for external path file operations on desktop
 const nodeFs = typeof globalThis !== "undefined" && "require" in globalThis
 	? (globalThis as unknown as Record<string, (id: string) => unknown>)["require"]("fs") as typeof import("fs")
 	: null;
-// eslint-disable-next-line -- Node.js path module needed for external path resolution on desktop
 const nodePath = typeof globalThis !== "undefined" && "require" in globalThis
 	? (globalThis as unknown as Record<string, (id: string) => unknown>)["require"]("path") as typeof import("path")
 	: null;
