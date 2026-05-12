@@ -78,7 +78,7 @@ describe("ExportPlanBuilder", () => {
 		metadataCache: {
 			getFirstLinkpathDest: vi.fn(),
 		},
-	} as unknown as ConstructorParameters<typeof ExportPlanBuilder>[0];
+	} as never;
 
 	const defaultSource: ExportSource = { type: "current-file", path: "note.md" };
 	const defaultSort: ExportSort = { mode: "path", direction: "asc" };

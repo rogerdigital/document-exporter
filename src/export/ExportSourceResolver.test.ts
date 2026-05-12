@@ -90,7 +90,7 @@ describe("ExportSourceResolver", () => {
 	describe("current-file", () => {
 		it("returns the file if it exists and is markdown", async () => {
 			const file = makeTFile("notes/a.md");
-			const app = createMockApp(file) as unknown as Parameters<typeof ExportSourceResolver.prototype["resolve"]> extends (source: unknown, sort: unknown) => Promise<infer R> ? unknown : never;
+			const app = createMockApp(file);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -103,7 +103,7 @@ describe("ExportSourceResolver", () => {
 		});
 
 		it("returns empty for missing file", async () => {
-			const app = createMockApp([]) as unknown as never;
+			const app = createMockApp([]);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -115,8 +115,8 @@ describe("ExportSourceResolver", () => {
 		});
 
 		it("returns empty for non-markdown file", async () => {
-			const app = createMockApp([]) as unknown as { vault: { getAbstractFileByPath: ReturnType<typeof vi.fn> } };
-			app.vault.getAbstractFileByPath.mockReturnValueOnce({
+			const app = createMockApp([]);
+			(app.vault.getAbstractFileByPath as ReturnType<typeof vi.fn>).mockReturnValueOnce({
 				path: "image.png",
 				extension: "png",
 			});
@@ -135,7 +135,7 @@ describe("ExportSourceResolver", () => {
 		it("returns only existing markdown files", async () => {
 			const a = makeTFile("a.md");
 			const b = makeTFile("b.md");
-			const app = createMockApp([a, b]) as unknown as never;
+			const app = createMockApp([a, b]);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -152,7 +152,7 @@ describe("ExportSourceResolver", () => {
 			const a = makeTFile("notes/a.md");
 			const b = makeTFile("notes/b.md");
 			const folder = makeTFolder("notes", [a, b]);
-			const app = createMockApp(folder) as unknown as never;
+			const app = createMockApp(folder);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -168,7 +168,7 @@ describe("ExportSourceResolver", () => {
 			const b = makeTFile("notes/sub/b.md");
 			const sub = makeTFolder("notes/sub", [b]);
 			const folder = makeTFolder("notes", [a, sub]);
-			const app = createMockApp(folder) as unknown as never;
+			const app = createMockApp(folder);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -184,7 +184,7 @@ describe("ExportSourceResolver", () => {
 			const b = makeTFile("notes/sub/b.md");
 			const sub = makeTFolder("notes/sub", [b]);
 			const folder = makeTFolder("notes", [a, sub]);
-			const app = createMockApp(folder) as unknown as never;
+			const app = createMockApp(folder);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -197,7 +197,7 @@ describe("ExportSourceResolver", () => {
 		});
 
 		it("returns empty for missing folder", async () => {
-			const app = createMockApp([]) as unknown as never;
+			const app = createMockApp([]);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -212,7 +212,7 @@ describe("ExportSourceResolver", () => {
 	describe("filter", () => {
 		it("returns tagged files", async () => {
 			const a = makeTFile("a.md");
-			const app = createMockApp([a], { "a.md": ["project"] }) as unknown as never;
+			const app = createMockApp([a], { "a.md": ["project"] });
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -225,7 +225,7 @@ describe("ExportSourceResolver", () => {
 
 		it("matches tag with leading #", async () => {
 			const a = makeTFile("a.md");
-			const app = createMockApp([a], { "a.md": ["#project"] }) as unknown as never;
+			const app = createMockApp([a], { "a.md": ["#project"] });
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -237,7 +237,7 @@ describe("ExportSourceResolver", () => {
 		});
 
 		it("returns empty for empty tag", async () => {
-			const app = createMockApp([]) as unknown as never;
+			const app = createMockApp([]);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -250,7 +250,7 @@ describe("ExportSourceResolver", () => {
 
 		it("returns empty when no files have the tag", async () => {
 			const a = makeTFile("a.md");
-			const app = createMockApp([a], {}) as unknown as never;
+			const app = createMockApp([a], {});
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -267,7 +267,7 @@ describe("ExportSourceResolver", () => {
 			const a = makeTFile("notes/a.md");
 			const b = makeTFile("notes/b.md");
 			const c = makeTFile("z.md");
-			const app = createMockApp([a, c, b]) as unknown as never;
+			const app = createMockApp([a, c, b]);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -286,7 +286,7 @@ describe("ExportSourceResolver", () => {
 			const a = makeTFile("notes/a.md");
 			const b = makeTFile("notes/b.md");
 			const c = makeTFile("z.md");
-			const app = createMockApp([a, b, c]) as unknown as never;
+			const app = createMockApp([a, b, c]);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
@@ -304,7 +304,7 @@ describe("ExportSourceResolver", () => {
 		it("sorts by name", async () => {
 			const a = makeTFile("notes/a.md");
 			const b = makeTFile("notes/b.md");
-			const app = createMockApp([b, a]) as unknown as never;
+			const app = createMockApp([b, a]);
 			const resolver = new ExportSourceResolver(app as never);
 
 			const result = await resolver.resolve(
