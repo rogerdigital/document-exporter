@@ -1,10 +1,11 @@
 import { App, TFile, FileSystemAdapter } from "obsidian";
 
-const nodeFs = typeof globalThis !== "undefined" && "require" in globalThis
-	? (globalThis as unknown as Record<string, (id: string) => unknown>)["require"]("fs") as typeof import("fs")
+const g = typeof window !== "undefined" ? window : undefined;
+const nodeFs = g && "require" in g
+	? (g as unknown as Record<string, (id: string) => unknown>)["require"]("fs") as typeof import("fs")
 	: null;
-const nodePath = typeof globalThis !== "undefined" && "require" in globalThis
-	? (globalThis as unknown as Record<string, (id: string) => unknown>)["require"]("path") as typeof import("path")
+const nodePath = g && "require" in g
+	? (g as unknown as Record<string, (id: string) => unknown>)["require"]("path") as typeof import("path")
 	: null;
 
 export class OutputWriter {
