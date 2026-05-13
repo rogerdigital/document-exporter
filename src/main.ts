@@ -79,7 +79,7 @@ export default class DocumentExporterPlugin extends Plugin {
 
 		try {
 			const resolver = new ExportSourceResolver(this.app);
-			const files = await resolver.resolve(result.source, result.sort);
+			const files = resolver.resolve(result.source, result.sort);
 			progress.increment();
 
 			const plan = new ExportPlanBuilder(
