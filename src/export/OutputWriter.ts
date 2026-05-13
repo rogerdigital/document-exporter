@@ -1,25 +1,25 @@
-import { App, TFile, FileSystemAdapter } from "obsidian";
+import { App, Platform, TFile } from "obsidian";
 
 const g = typeof window !== "undefined" ? window : undefined;
 const nodeFs = g && "require" in g
 	? (g as unknown as Record<string, (id: string) => unknown>)["require"]("fs") as typeof import("fs")
 	: null;
-const nodePath = g && "require" in g
-	? (g as unknown as Record<string, (id: string) => unknown>)["require"]("path") as typeof import("path")
-	: null;
 
 export class OutputWriter {
 	private app: App;
-	private vaultRoot: string;
 
 	constructor(app: App) {
 		this.app = app;
-		this.vaultRoot = this.resolveVaultRoot();
+	}
+
+	static supportsExternalPaths(): boolean {
+		return Platform.isDesktopApp;
 	}
 
 	async ensureFolder(folderPath: string): Promise<void> {
 		if (this.isExternal(folderPath)) {
-			nodeFs?.mkdirSync(folderPath, { recursive: true });
+			if (!nodeFs) return;
+			nodeFs.mkdirSync(folderPath, { recursive: true });
 			return;
 		}
 
@@ -36,7 +36,8 @@ export class OutputWriter {
 
 	async writeText(filePath: string, content: string): Promise<void> {
 		if (this.isExternal(filePath)) {
-			nodeFs?.writeFileSync(filePath, content, "utf-8");
+			if (!nodeFs) return;
+			nodeFs.writeFileSync(filePath, content, "utf-8");
 			return;
 		}
 
@@ -49,20 +50,20 @@ export class OutputWriter {
 	}
 
 	async copyBinaryFile(sourcePath: string, destPath: string): Promise<void> {
-		// Source is always vault-internal
-		const absSource = nodePath?.join(this.vaultRoot, sourcePath) ?? sourcePath;
-		if (!nodeFs?.existsSync(absSource)) return;
+		const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
+		if (!sourceFile || !("extension" in sourceFile)) return;
 
-		const content = nodeFs.readFileSync(absSource);
+		const content = await this.app.vault.readBinary(sourceFile as TFile);
 
 		if (this.isExternal(destPath)) {
-			nodeFs.writeFileSync(destPath, content);
+			if (!nodeFs) return;
+			nodeFs.writeFileSync(destPath, Buffer.from(content));
 		} else {
 			const existing = this.app.vault.getAbstractFileByPath(destPath);
-			if (existing instanceof TFile) {
-				await this.app.vault.modifyBinary(existing, content as unknown as ArrayBuffer);
+			if (existing && "extension" in existing) {
+				await this.app.vault.modifyBinary(existing as TFile, content);
 			} else {
-				await this.app.vault.createBinary(destPath, content as unknown as ArrayBuffer);
+				await this.app.vault.createBinary(destPath, content);
 			}
 		}
 	}
@@ -94,12 +95,5 @@ export class OutputWriter {
 		if (p.startsWith("/")) return true;
 		if (/^[A-Za-z]:/.test(p)) return true;
 		return false;
-	}
-
-	private resolveVaultRoot(): string {
-		if (this.app.vault.adapter instanceof FileSystemAdapter) {
-			return this.app.vault.adapter.getBasePath();
-		}
-		return "";
 	}
 }
