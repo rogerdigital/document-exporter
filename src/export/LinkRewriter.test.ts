@@ -115,6 +115,22 @@ describe("LinkRewriter", () => {
 			expect(markdown).toBe('<img src="attachments/image.png" alt="image.png" />');
 		});
 	});
+
+	describe("code block protection", () => {
+		it("does not rewrite wiki links inside fenced code blocks", () => {
+			const rewriter = makeRewriter("markdown-bundle");
+			const md = "```\n[[Note1]]\n```";
+			const { markdown } = rewriter.rewrite(md, "notes/note1.md");
+			expect(markdown).toBe(md);
+		});
+
+		it("does not rewrite wiki links inside inline code", () => {
+			const rewriter = makeRewriter("markdown-bundle");
+			const md = "see `[[Note1]]` for details";
+			const { markdown } = rewriter.rewrite(md, "notes/note1.md");
+			expect(markdown).toBe(md);
+		});
+	});
 });
 
 describe("slugify", () => {
@@ -132,6 +148,10 @@ describe("slugify", () => {
 
 	it("handles CJK characters", () => {
 		expect(slugify("中文标题")).toBe("中文标题");
+	});
+
+	it("handles Japanese kana", () => {
+		expect(slugify("テスト")).toBe("テスト");
 	});
 
 	it("handles empty string", () => {

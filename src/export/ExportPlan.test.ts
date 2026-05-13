@@ -51,6 +51,24 @@ describe("validatePlan", () => {
 		expect(result).toBe("Output folder cannot use parent directory traversal.");
 	});
 
+	it("returns error for .. embedded in middle of path", () => {
+		const plan = makePlan({ outputRoot: "foo/../../../etc" });
+		const result = validatePlan(plan);
+		expect(result).toBe("Output folder cannot use parent directory traversal.");
+	});
+
+	it("returns error for single dot segment in path", () => {
+		const plan = makePlan({ outputRoot: "foo/./bar" });
+		const result = validatePlan(plan);
+		expect(result).toBe("Output folder cannot use parent directory traversal.");
+	});
+
+	it("allows dots within folder names", () => {
+		const plan = makePlan({ outputRoot: "my.exports/v1.0" });
+		const result = validatePlan(plan);
+		expect(result).toBeNull();
+	});
+
 	it("returns null for valid plan", () => {
 		const plan = makePlan();
 		const result = validatePlan(plan);
