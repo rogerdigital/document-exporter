@@ -260,6 +260,40 @@ describe("ExportSourceResolver", () => {
 
 			expect(result).toHaveLength(0);
 		});
+
+		it("matches tags in frontmatter", () => {
+			const a = makeTFile("a.md");
+			const app = createMockApp([a], {});
+			(app.metadataCache.getFileCache as ReturnType<typeof vi.fn>).mockReturnValue({
+				tags: [],
+				frontmatter: { tags: ["project", "active"] },
+			});
+			const resolver = new ExportSourceResolver(app as never);
+
+			const result = resolver.resolve(
+				{ type: "filter", queryText: "", tag: "project" },
+				sortAsc,
+			);
+
+			expect(result).toHaveLength(1);
+		});
+
+		it("matches frontmatter tag with # prefix in query", () => {
+			const a = makeTFile("a.md");
+			const app = createMockApp([a], {});
+			(app.metadataCache.getFileCache as ReturnType<typeof vi.fn>).mockReturnValue({
+				tags: [],
+				frontmatter: { tags: ["project"] },
+			});
+			const resolver = new ExportSourceResolver(app as never);
+
+			const result = resolver.resolve(
+				{ type: "filter", queryText: "", tag: "#project" },
+				sortAsc,
+			);
+
+			expect(result).toHaveLength(1);
+		});
 	});
 
 	describe("sorting", () => {

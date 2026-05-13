@@ -1,5 +1,6 @@
 import { App } from "obsidian";
 import { ExportProfileId, AttachmentCopy } from "@/types";
+import { normalizePath, extractCodeBlocks, restoreCodeBlocks } from "@/export/utils";
 
 const WIKI_LINK_RE = /\[\[([^\]]+)]]/g;
 const WIKI_EMBED_RE = /!\[\[([^\]]+)]]/g;
@@ -33,8 +34,10 @@ export class LinkRewriter {
 	rewrite(markdown: string, sourcePath: string): RewriteResult {
 		const warnings: string[] = [];
 
+		const { text, blocks } = extractCodeBlocks(markdown);
+
 		// Rewrite embedded attachments: ![[image.png]]
-		let result = markdown.replace(WIKI_EMBED_RE, (match, link: string) => {
+		let result = text.replace(WIKI_EMBED_RE, (match, link: string) => {
 			const cleanLink = link.split("|")[0].split("#")[0];
 			const dest = this.resolvePath(cleanLink, sourcePath);
 			if (!dest) return match;
@@ -99,6 +102,8 @@ export class LinkRewriter {
 			return match;
 		});
 
+		result = restoreCodeBlocks(result, blocks);
+
 		return { markdown: result, warnings };
 	}
 
@@ -115,7 +120,7 @@ export class LinkRewriter {
 			? sourcePath.substring(0, sourcePath.lastIndexOf("/"))
 			: "";
 		const resolved = dir ? `${dir}/${href}` : href;
-		const normalized = resolved.replace(/\/{2,}/g, "/");
+		const normalized = normalizePath(resolved);
 		const file = this.app.vault.getAbstractFileByPath(normalized);
 		return file ? normalized : null;
 	}
@@ -135,6 +140,8 @@ export class LinkRewriter {
 export function slugify(text: string): string {
 	return text
 		.toLowerCase()
-		.replace(/[^a-z0-9一-鿿]+/g, "-")
+		.replace(/\s+/g, "-")
+		.replace(/[^a-z0-9一-鿿぀-ゟ゠-ヿ가-힯_-]+/g, "")
+		.replace(/-+/g, "-")
 		.replace(/^-|-$/g, "");
 }

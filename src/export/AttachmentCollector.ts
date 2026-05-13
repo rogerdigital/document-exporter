@@ -1,5 +1,6 @@
 import { App, TAbstractFile, TFile } from "obsidian";
 import { AttachmentCopy } from "@/types";
+import { normalizePath } from "@/export/utils";
 
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
@@ -28,6 +29,7 @@ export class AttachmentCollector {
 
 	async collect(files: TFile[]): Promise<CollectResult> {
 		const seen = new Map<string, AttachmentCopy>();
+		const usedNames = new Set<string>();
 		const warnings: string[] = [];
 
 		for (const file of files) {
@@ -42,9 +44,10 @@ export class AttachmentCollector {
 					const targetFile = this.app.vault.getAbstractFileByPath(target);
 					if (isFileLike(targetFile) && targetFile.extension !== "md") {
 						if (!seen.has(target)) {
+							const outputName = this.uniqueName(targetFile, usedNames);
 							seen.set(target, {
 								sourcePath: target,
-								outputRelativePath: `assets/${targetFile.name}`,
+								outputRelativePath: `assets/${outputName}`,
 							});
 						}
 					}
@@ -59,16 +62,17 @@ export class AttachmentCollector {
 					const targetFile = this.app.vault.getAbstractFileByPath(target);
 					if (isFileLike(targetFile) && isAttachmentExt(targetFile.extension)) {
 						if (!seen.has(target)) {
+							const outputName = this.uniqueName(targetFile, usedNames);
 							seen.set(target, {
 								sourcePath: target,
-								outputRelativePath: `assets/${targetFile.name}`,
+								outputRelativePath: `assets/${outputName}`,
 							});
 						}
 					}
 				}
 			}
 
-			this.collectFromMarkdownImages(content, file.path, seen, warnings);
+			this.collectFromMarkdownImages(content, file.path, seen, usedNames, warnings);
 		}
 
 		return { attachments: Array.from(seen.values()), warnings };
@@ -78,6 +82,7 @@ export class AttachmentCollector {
 		content: string,
 		sourcePath: string,
 		seen: Map<string, AttachmentCopy>,
+		usedNames: Set<string>,
 		warnings: string[],
 	): void {
 		let match: RegExpExecArray | null;
@@ -98,9 +103,10 @@ export class AttachmentCollector {
 			const targetFile = this.app.vault.getAbstractFileByPath(target);
 			if (isFileLike(targetFile)) {
 				if (!seen.has(target)) {
+					const outputName = this.uniqueName(targetFile, usedNames);
 					seen.set(target, {
 						sourcePath: target,
-						outputRelativePath: `assets/${targetFile.name}`,
+						outputRelativePath: `assets/${outputName}`,
 					});
 				}
 			}
@@ -126,9 +132,22 @@ export class AttachmentCollector {
 			? sourcePath.substring(0, sourcePath.lastIndexOf("/"))
 			: "";
 		const resolved = dir ? `${dir}/${href}` : href;
-		const normalized = resolved.replace(/\/{2,}/g, "/");
+		const normalized = normalizePath(resolved);
 
 		const file = this.app.vault.getAbstractFileByPath(normalized);
 		return file ? normalized : null;
+	}
+
+	private uniqueName(file: TFile, usedNames: Set<string>): string {
+		if (!usedNames.has(file.name)) {
+			usedNames.add(file.name);
+			return file.name;
+		}
+		const dir = file.path.includes("/")
+			? file.path.substring(0, file.path.lastIndexOf("/")).split("/").pop()!
+			: "";
+		const prefixed = dir ? `${dir}-${file.name}` : file.name;
+		usedNames.add(prefixed);
+		return prefixed;
 	}
 }

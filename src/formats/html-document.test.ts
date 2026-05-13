@@ -80,6 +80,87 @@ describe("HTML Document rendering", () => {
 			expect(html).not.toContain("title-page");
 		});
 	});
+	describe("XSS prevention", () => {
+		it("escapes HTML in markdown body content", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "Safe", markdown: '<img src=x onerror="alert(1)">', frontmatter: {} },
+			]);
+
+			expect(html).not.toContain('onerror="alert(1)"');
+			expect(html).toContain("&lt;img");
+		});
+
+		it("preserves code block content unmangled", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "Code", markdown: "```html\n<div>hi</div>\n```", frontmatter: {} },
+			]);
+
+			expect(html).toContain("<pre><code>");
+			expect(html).toContain("&lt;div&gt;hi&lt;/div&gt;");
+		});
+	});
+
+	describe("markdown features", () => {
+		it("renders bold and italic", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "A", markdown: "**bold** and *italic*", frontmatter: {} },
+			]);
+
+			expect(html).toContain("<strong>bold</strong>");
+			expect(html).toContain("<em>italic</em>");
+		});
+
+		it("renders blockquotes", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "A", markdown: "> quoted text", frontmatter: {} },
+			]);
+
+			expect(html).toContain("<blockquote>");
+		});
+
+		it("renders unordered lists", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "A", markdown: "- item one\n- item two", frontmatter: {} },
+			]);
+
+			expect(html).toContain("<ul>");
+			expect(html).toContain("<li>item one</li>");
+		});
+
+		it("renders ordered lists", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "A", markdown: "1. first\n2. second", frontmatter: {} },
+			]);
+
+			expect(html).toContain("<ol>");
+			expect(html).toContain("<li>first</li>");
+		});
+
+		it("renders horizontal rules", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "A", markdown: "above\n\n---\n\nbelow", frontmatter: {} },
+			]);
+
+			expect(html).toContain("<hr>");
+		});
+
+		it("renders strikethrough", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "A", markdown: "~~deleted~~", frontmatter: {} },
+			]);
+
+			expect(html).toContain("<del>deleted</del>");
+		});
+
+		it("renders task lists", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "A", markdown: "- [x] done\n- [ ] todo", frontmatter: {} },
+			]);
+
+			expect(html).toContain("checked");
+			expect(html).toContain("task-done");
+		});
+	});
 });
 
 // Test helpers

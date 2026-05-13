@@ -134,4 +134,35 @@ describe("AttachmentCollector", () => {
 
 		expect(result.attachments).toHaveLength(0);
 	});
+
+	it("generates unique output names on collision", async () => {
+		const fileA: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
+		const fileB: MockFile = { path: "notes/b.md", extension: "md", name: "b.md" };
+
+		const app = createMockApp(
+			{
+				"notes/a.md": [{ link: "image.png" }],
+				"notes/b.md": [{ link: "photos/image.png" }],
+			},
+		);
+
+		const photosFile: MockFile = { path: "photos/image.png", extension: "png", name: "image.png" };
+		(app.vault.getAbstractFileByPath as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+			if (path === "assets/image.png") return { path, extension: "png", name: "image.png" };
+			if (path === "photos/image.png") return photosFile;
+			return null;
+		});
+		(app.metadataCache.getFirstLinkpathDest as ReturnType<typeof vi.fn>).mockImplementation((link: string) => {
+			if (link === "image.png") return { path: "assets/image.png" };
+			if (link === "photos/image.png") return { path: "photos/image.png" };
+			return null;
+		});
+
+		const collector = new AttachmentCollector(app as never, new Set());
+		const result = await collector.collect([fileA as never, fileB as never]);
+
+		expect(result.attachments).toHaveLength(2);
+		const outputPaths = result.attachments.map(a => a.outputRelativePath);
+		expect(outputPaths[0]).not.toBe(outputPaths[1]);
+	});
 });
