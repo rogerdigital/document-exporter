@@ -226,7 +226,7 @@ export class ExportModal extends Modal {
 		const input = row.createEl("input", {
 			type: "text",
 			cls: "export-modal-folder-input",
-			attr: { placeholder: "Exports or /Users/you/Desktop/exports" },
+			attr: { placeholder: "Exports or /users/you/desktop/exports" },
 		});
 		input.value = this.outputFolder;
 		input.addEventListener("input", (e) => {
@@ -249,8 +249,9 @@ export class ExportModal extends Modal {
 			sysBtn.addEventListener("click", () => {
 				void (async () => {
 					try {
-						const electron = typeof globalThis !== "undefined" && "require" in globalThis
-							? (globalThis as unknown as Record<string, (id: string) => unknown>)["require"]("electron") as { remote?: { dialog?: { showOpenDialog: (opts: unknown) => Promise<{ canceled: boolean; filePaths: string[] }> } }; dialog?: { showOpenDialog: (opts: unknown) => Promise<{ canceled: boolean; filePaths: string[] }> } } | undefined
+						const g = typeof window !== "undefined" ? window : undefined;
+						const electron = g && "require" in g
+							? (g as unknown as Record<string, (id: string) => unknown>)["require"]("electron") as { remote?: { dialog?: { showOpenDialog: (opts: unknown) => Promise<{ canceled: boolean; filePaths: string[] }> } }; dialog?: { showOpenDialog: (opts: unknown) => Promise<{ canceled: boolean; filePaths: string[] }> } } | undefined
 							: undefined;
 						const dialog = electron?.remote?.dialog ?? electron?.dialog;
 						if (!dialog) return;
