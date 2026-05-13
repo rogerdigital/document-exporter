@@ -1,6 +1,6 @@
 {
   "name": "document-exporter",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Export Obsidian notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.",
   "main": "main.js",
   "scripts": {
