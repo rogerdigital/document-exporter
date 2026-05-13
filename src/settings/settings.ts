@@ -4,8 +4,7 @@ import { Plugin } from "obsidian";
 export async function loadSettings(
 	plugin: Plugin,
 ): Promise<ExportSettings> {
-	const loaded = await plugin.loadData();
-	return Object.assign({}, DEFAULT_SETTINGS, loaded);
+	return Object.assign({}, DEFAULT_SETTINGS, await plugin.loadData() as Partial<ExportSettings>);
 }
 
 export async function saveSettings(

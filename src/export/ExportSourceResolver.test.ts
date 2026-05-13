@@ -93,7 +93,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp(file);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "current-file", path: "notes/a.md" },
 				sortAsc,
 			);
@@ -106,7 +106,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([]);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "current-file", path: "missing.md" },
 				sortAsc,
 			);
@@ -122,7 +122,7 @@ describe("ExportSourceResolver", () => {
 			});
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "current-file", path: "image.png" },
 				sortAsc,
 			);
@@ -138,7 +138,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([a, b]);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "files", paths: ["a.md", "b.md", "missing.md"] },
 				sortAsc,
 			);
@@ -155,7 +155,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp(folder);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "folder", path: "notes", recursive: false },
 				sortAsc,
 			);
@@ -171,7 +171,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp(folder);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "folder", path: "notes", recursive: true },
 				sortAsc,
 			);
@@ -187,7 +187,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp(folder);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "folder", path: "notes", recursive: false },
 				sortAsc,
 			);
@@ -200,7 +200,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([]);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "folder", path: "missing", recursive: true },
 				sortAsc,
 			);
@@ -215,7 +215,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([a], { "a.md": ["project"] });
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "filter", queryText: "", tag: "project" },
 				sortAsc,
 			);
@@ -228,7 +228,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([a], { "a.md": ["#project"] });
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "filter", queryText: "", tag: "#project" },
 				sortAsc,
 			);
@@ -240,7 +240,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([]);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "filter", queryText: "", tag: "" },
 				sortAsc,
 			);
@@ -253,7 +253,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([a], {});
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "filter", queryText: "", tag: "nonexistent" },
 				sortAsc,
 			);
@@ -270,7 +270,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([a, c, b]);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "files", paths: ["z.md", "notes/a.md", "notes/b.md"] },
 				{ mode: "path", direction: "asc" },
 			);
@@ -289,7 +289,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([a, b, c]);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "files", paths: ["notes/a.md", "notes/b.md", "z.md"] },
 				{ mode: "path", direction: "desc" },
 			);
@@ -307,7 +307,7 @@ describe("ExportSourceResolver", () => {
 			const app = createMockApp([b, a]);
 			const resolver = new ExportSourceResolver(app as never);
 
-			const result = await resolver.resolve(
+			const result = resolver.resolve(
 				{ type: "files", paths: ["notes/b.md", "notes/a.md"] },
 				{ mode: "name", direction: "asc" },
 			);
