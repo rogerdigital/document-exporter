@@ -226,7 +226,9 @@ export class ExportModal extends Modal {
 		const input = row.createEl("input", {
 			type: "text",
 			cls: "export-modal-folder-input",
-			attr: { placeholder: "Exports or /users/you/desktop/exports" },
+			attr: { placeholder: Platform.isDesktopApp
+				? "Exports or /users/you/desktop/exports"
+				: "Exports (vault-relative only)" },
 		});
 		input.value = this.outputFolder;
 		input.addEventListener("input", (e) => {

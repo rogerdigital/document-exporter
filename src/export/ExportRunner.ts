@@ -34,6 +34,14 @@ export class ExportRunner {
 		const allWarnings: string[] = [];
 		this.cancelled = false;
 
+		if (!OutputWriter.supportsExternalPaths() && writer.isExternal(plan.outputRoot)) {
+			return {
+				success: false,
+				outputRoot: plan.outputRoot,
+				warnings: ["External paths are not supported on mobile. Use a vault-relative path."],
+			};
+		}
+
 		// Resolve TFile objects from plan input paths
 		const files = plan.inputFiles
 			.map((p) => this.app.vault.getAbstractFileByPath(p))
