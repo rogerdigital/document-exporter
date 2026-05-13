@@ -58,14 +58,14 @@ function markdownToBasicHtml(md: string): string {
 	const codeBlocks: string[] = [];
 	let html = md.replace(/```(\w*)\n([\s\S]*?)```/g, (_match: string, _lang: string, code: string) => {
 		codeBlocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
-		return `\x00CB${codeBlocks.length - 1}\x00`;
+		return `CB${codeBlocks.length - 1}`;
 	});
 
 	// 2. Extract inline code
 	const inlineCode: string[] = [];
 	html = html.replace(/`([^`\n]+)`/g, (_match: string, code: string) => {
 		inlineCode.push(`<code>${escapeHtml(code)}</code>`);
-		return `\x00IC${inlineCode.length - 1}\x00`;
+		return `IC${inlineCode.length - 1}`;
 	});
 
 	// 3. Escape remaining HTML
@@ -137,12 +137,10 @@ function markdownToBasicHtml(md: string): string {
 		.join("\n");
 
 	// 14. Restore inline code
-	const inlineCodePattern = new RegExp("\x00IC(\\d+)\x00", "g");
-	html = html.replace(inlineCodePattern, (_match: string, idx: string) => inlineCode[parseInt(idx)]);
+	html = html.replace(/IC(\d+)/g, (_match: string, idx: string) => inlineCode[parseInt(idx)]);
 
 	// 15. Restore code blocks
-	const codeBlockPattern = new RegExp("\x00CB(\\d+)\x00", "g");
-	html = html.replace(codeBlockPattern, (_match: string, idx: string) => codeBlocks[parseInt(idx)]);
+	html = html.replace(/CB(\d+)/g, (_match: string, idx: string) => codeBlocks[parseInt(idx)]);
 
 	return html;
 }
