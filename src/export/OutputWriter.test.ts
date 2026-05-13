@@ -1,12 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
+import { TFile } from "obsidian";
 import { OutputWriter } from "@/export/OutputWriter";
 
 function createMockApp(files: Record<string, { extension: string; content?: ArrayBuffer }> = {}) {
-	const mockFiles = new Map<string, { path: string; extension: string }>();
+	const mockFiles = new Map<string, TFile>();
 	const binaryContents = new Map<string, ArrayBuffer>();
 
 	for (const [path, opts] of Object.entries(files)) {
-		mockFiles.set(path, { path, extension: opts.extension });
+		const f = new TFile();
+		f.path = path;
+		f.extension = opts.extension;
+		mockFiles.set(path, f);
 		if (opts.content) binaryContents.set(path, opts.content);
 	}
 
@@ -18,7 +22,7 @@ function createMockApp(files: Record<string, { extension: string; content?: Arra
 			modify: vi.fn(),
 			createBinary: vi.fn(),
 			modifyBinary: vi.fn(),
-			readBinary: vi.fn((file: { path: string }) => binaryContents.get(file.path) ?? new ArrayBuffer(0)),
+			readBinary: vi.fn((file: TFile) => binaryContents.get(file.path) ?? new ArrayBuffer(0)),
 			adapter: {},
 		},
 	};
