@@ -41,8 +41,7 @@ export class ProgressNotice {
 		}
 
 		if (this.onCancel) {
-			// eslint-disable-next-line @typescript-eslint/no-deprecated
-			const el = this.notice.noticeEl;
+			const el = (this.notice as unknown as { noticeEl: HTMLElement }).noticeEl;
 			let cancelEl = el.querySelector(".progress-cancel");
 			if (!cancelEl) {
 				cancelEl = el.createEl("span", { text: " [cancel]", cls: "progress-cancel" });
