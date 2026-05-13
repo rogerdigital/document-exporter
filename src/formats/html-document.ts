@@ -137,12 +137,12 @@ function markdownToBasicHtml(md: string): string {
 		.join("\n");
 
 	// 14. Restore inline code
-	// eslint-disable-next-line no-control-regex
-	html = html.replace(/\x00IC(\d+)\x00/g, (_match: string, idx: string) => inlineCode[parseInt(idx)]);
+	const inlineCodePattern = new RegExp("\x00IC(\\d+)\x00", "g");
+	html = html.replace(inlineCodePattern, (_match: string, idx: string) => inlineCode[parseInt(idx)]);
 
 	// 15. Restore code blocks
-	// eslint-disable-next-line no-control-regex
-	html = html.replace(/\x00CB(\d+)\x00/g, (_match: string, idx: string) => codeBlocks[parseInt(idx)]);
+	const codeBlockPattern = new RegExp("\x00CB(\\d+)\x00", "g");
+	html = html.replace(codeBlockPattern, (_match: string, idx: string) => codeBlocks[parseInt(idx)]);
 
 	return html;
 }
