@@ -51,17 +51,17 @@ export class OutputWriter {
 
 	async copyBinaryFile(sourcePath: string, destPath: string): Promise<void> {
 		const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
-		if (!sourceFile || !("extension" in sourceFile)) return;
+		if (!(sourceFile instanceof TFile)) return;
 
-		const content = await this.app.vault.readBinary(sourceFile as TFile);
+		const content = await this.app.vault.readBinary(sourceFile);
 
 		if (this.isExternal(destPath)) {
 			if (!nodeFs) return;
-			nodeFs.writeFileSync(destPath, Buffer.from(content));
+			nodeFs.writeFileSync(destPath, new Uint8Array(content));
 		} else {
 			const existing = this.app.vault.getAbstractFileByPath(destPath);
-			if (existing && "extension" in existing) {
-				await this.app.vault.modifyBinary(existing as TFile, content);
+			if (existing instanceof TFile) {
+				await this.app.vault.modifyBinary(existing, content);
 			} else {
 				await this.app.vault.createBinary(destPath, content);
 			}
