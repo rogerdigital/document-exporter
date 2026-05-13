@@ -17,8 +17,12 @@
     "html",
     "pdf"
   ],
-  "author": "",
+  "author": "Roger Deng",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rogerdigital/document-exporter"
+  },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "builtin-modules": "^3.3.0",
