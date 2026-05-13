@@ -59,6 +59,8 @@ export class ExportModal extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
+		this.resolve?.(null);
+		this.resolve = null;
 	}
 
 	openForResult(): Promise<ExportModalResult | null> {
@@ -344,42 +346,70 @@ export class ExportModal extends Modal {
 	}
 }
 
-class FilePickerModal extends FuzzySuggestModal<TFile> {
-	private selectedPaths: string[];
-	private onDone: (paths: string[]) => void;
+class FilePickerModal extends Modal {
 	private chosen: Set<string>;
+	private onDone: (paths: string[]) => void;
+	private filterText = "";
+	private listEl: HTMLElement | null = null;
 
 	constructor(app: App, currentPaths: string[], onDone: (paths: string[]) => void) {
 		super(app);
-		this.selectedPaths = currentPaths;
 		this.chosen = new Set(currentPaths);
 		this.onDone = onDone;
-		this.setPlaceholder("Search files to add...");
-		this.setInstructions([{ command: "Enter", purpose: "Toggle selection" }]);
 	}
 
-	getItems(): TFile[] {
-		return this.app.vault.getMarkdownFiles();
-	}
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.addClass("file-picker-modal");
+		contentEl.createEl("h3", { text: "Select files" });
 
-	getItemText(item: TFile): string {
-		const selected = this.chosen.has(item.path) ? "✓ " : "  ";
-		return `${selected}${item.path}`;
-	}
+		const input = contentEl.createEl("input", {
+			type: "text",
+			cls: "file-picker-filter",
+			attr: { placeholder: "Filter files..." },
+		});
+		input.addEventListener("input", () => {
+			this.filterText = input.value.toLowerCase();
+			this.renderList();
+		});
 
-	onChooseItem(item: TFile): void {
-		if (this.chosen.has(item.path)) {
-			this.chosen.delete(item.path);
-		} else {
-			this.chosen.add(item.path);
-		}
-		this.selectedPaths = Array.from(this.chosen);
-		this.onDone(this.selectedPaths);
-		this.close();
+		this.listEl = contentEl.createDiv({ cls: "file-picker-list" });
+		this.renderList();
+
+		const doneBtn = contentEl.createEl("button", { text: "Done", cls: "mod-cta file-picker-done-btn" });
+		doneBtn.addEventListener("click", () => {
+			this.close();
+		});
 	}
 
 	onClose(): void {
 		this.onDone(Array.from(this.chosen));
+	}
+
+	private renderList(): void {
+		if (!this.listEl) return;
+		this.listEl.empty();
+
+		const allFiles = this.app.vault.getMarkdownFiles();
+		const filtered = this.filterText
+			? allFiles.filter((f) => f.path.toLowerCase().includes(this.filterText))
+			: allFiles;
+
+		for (const file of filtered) {
+			const row = this.listEl.createDiv({ cls: "file-picker-item" });
+			const label = row.createEl("label");
+			const checkbox = label.createEl("input", { type: "checkbox" });
+			checkbox.checked = this.chosen.has(file.path);
+			checkbox.addEventListener("change", () => {
+				if (checkbox.checked) {
+					this.chosen.add(file.path);
+				} else {
+					this.chosen.delete(file.path);
+				}
+			});
+			label.appendText(" " + file.path);
+		}
 	}
 }
 

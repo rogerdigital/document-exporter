@@ -53,3 +53,17 @@
 	gap: 0.5em;
 	margin-top: 1.5em;
 }
+
+.file-picker-list {
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+.file-picker-done-btn {
+	margin-top: 8px;
+}
+
+.progress-cancel {
+	cursor: pointer;
+	text-decoration: underline;
+}

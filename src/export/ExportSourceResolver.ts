@@ -85,12 +85,18 @@ export class ExportSourceResolver {
 
 		for (const file of mdFiles) {
 			const cache = this.app.metadataCache.getFileCache(file);
-			if (!cache?.tags) continue;
+			if (!cache) continue;
 
-			const hasTag = cache.tags.some(
+			const hasInlineTag = cache.tags?.some(
 				(t) => t.tag === cleanTag || t.tag === `#${cleanTag}`,
 			);
-			if (hasTag) {
+
+			const fmTags = cache.frontmatter?.tags as string[] | undefined;
+			const hasFrontmatterTag = fmTags?.some(
+				(t: string) => t === cleanTag || t === `#${cleanTag}`,
+			);
+
+			if (hasInlineTag || hasFrontmatterTag) {
 				result.push(file);
 			}
 		}

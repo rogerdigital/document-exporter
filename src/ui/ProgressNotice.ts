@@ -5,6 +5,7 @@ export class ProgressNotice {
 	private message: string;
 	private count = 0;
 	private total = 0;
+	onCancel: (() => void) | null = null;
 
 	constructor(message: string) {
 		this.message = message;
@@ -23,6 +24,7 @@ export class ProgressNotice {
 
 	finish(finalMessage: string): void {
 		this.notice?.hide();
+		this.notice = null;
 		new Notice(finalMessage, 5000);
 	}
 
@@ -31,7 +33,23 @@ export class ProgressNotice {
 			this.total > 0
 				? `${this.message} (${this.count}/${this.total})`
 				: this.message;
-		this.notice?.hide();
-		this.notice = new Notice(text, 0);
+
+		if (this.notice) {
+			this.notice.setMessage(text);
+		} else {
+			this.notice = new Notice(text, 0);
+		}
+
+		if (this.onCancel) {
+			// eslint-disable-next-line @typescript-eslint/no-deprecated
+			const el = this.notice.noticeEl;
+			let cancelEl = el.querySelector(".progress-cancel");
+			if (!cancelEl) {
+				cancelEl = el.createEl("span", { text: " [cancel]", cls: "progress-cancel" });
+				cancelEl.addEventListener("click", () => {
+					this.onCancel?.();
+				});
+			}
+		}
 	}
 }

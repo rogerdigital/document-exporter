@@ -58,6 +58,10 @@ export class ExportRunner {
 			};
 		}
 
+		if (files.length > 500) {
+			allWarnings.push(`Large export: ${files.length} files. This may take a while.`);
+		}
+
 		// Handle existing output folder
 		let outputRoot = plan.outputRoot;
 		if (!settings.overwriteExisting && !writer.isExternal(outputRoot)) {
@@ -97,6 +101,7 @@ export class ExportRunner {
 		);
 
 		for (const section of doc.sections) {
+			if (this.cancelled) return this.cancelledResult(outputRoot);
 			const result = rewriter.rewrite(section.markdown, section.sourcePath);
 			section.markdown = result.markdown;
 			allWarnings.push(...result.warnings);

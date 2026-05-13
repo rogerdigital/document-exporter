@@ -1,4 +1,4 @@
-import { PluginSettingTab, App, Setting } from "obsidian";
+import { PluginSettingTab, App, Setting, debounce } from "obsidian";
 import { ExportProfileId, ExportSort } from "@/types";
 import type DocumentExporterPlugin from "@/main";
 
@@ -26,6 +26,11 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		const debouncedSaveOutputFolder = debounce(async (v: string) => {
+			this.plugin.settings.defaultOutputFolder = v;
+			await this.plugin.saveSettings();
+		}, 500, true);
+
 		// Output folder — most important setting, shown first
 		new Setting(containerEl)
 			.setName("Output folder")
@@ -33,9 +38,8 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 			.addText((text) => {
 				text.setPlaceholder("Exports");
 				text.setValue(this.plugin.settings.defaultOutputFolder);
-				text.onChange(async (v) => {
-					this.plugin.settings.defaultOutputFolder = v;
-					await this.plugin.saveSettings();
+				text.onChange((v) => {
+					debouncedSaveOutputFolder(v);
 				});
 			});
 

@@ -67,7 +67,8 @@ export function validatePlan(plan: ExportPlan): string | null {
 	if (!plan.outputRoot || plan.outputRoot.trim() === "") {
 		return "Output folder cannot be empty.";
 	}
-	if (plan.outputRoot.startsWith("..")) {
+	const segments = plan.outputRoot.split("/");
+	if (segments.some(s => s === ".." || s === ".")) {
 		return "Output folder cannot use parent directory traversal.";
 	}
 	return null;

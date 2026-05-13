@@ -54,9 +54,59 @@ function renderSections(sections: DocumentSection[]): string {
 }
 
 function markdownToBasicHtml(md: string): string {
-	let html = md;
+	// 1. Extract fenced code blocks
+	const codeBlocks: string[] = [];
+	let html = md.replace(/```(\w*)\n([\s\S]*?)```/g, (_match: string, _lang: string, code: string) => {
+		codeBlocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
+		return `\x00CB${codeBlocks.length - 1}\x00`;
+	});
 
-	// Headers
+	// 2. Extract inline code
+	const inlineCode: string[] = [];
+	html = html.replace(/`([^`\n]+)`/g, (_match: string, code: string) => {
+		inlineCode.push(`<code>${escapeHtml(code)}</code>`);
+		return `\x00IC${inlineCode.length - 1}\x00`;
+	});
+
+	// 3. Escape remaining HTML
+	html = escapeHtml(html);
+
+	// 4. Tables
+	html = html.replace(/^(\|.+\|)\n(\|[-:| ]+\|)\n((?:\|.+\|\n?)+)/gm, (_, header: string, _align: string, body: string) => {
+		const ths = header.split("|").slice(1, -1).map(c => `<th>${c.trim()}</th>`).join("");
+		const rows = body.trim().split("\n").map(row => {
+			const tds = row.split("|").slice(1, -1).map(c => `<td>${c.trim()}</td>`).join("");
+			return `<tr>${tds}</tr>`;
+		}).join("");
+		return `<table><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+	});
+
+	// 5. Blockquotes
+	html = html.replace(/^(&gt; .+(?:\n&gt; .+)*)/gm, (match) => {
+		const content = match.replace(/^&gt; /gm, "");
+		return `<blockquote>${content}</blockquote>`;
+	});
+
+	// 6. Task lists
+	html = html.replace(/^- \[x\] (.+)$/gm, '<li class="task-done"><input type="checkbox" checked disabled> $1</li>');
+	html = html.replace(/^- \[ \] (.+)$/gm, '<li class="task"><input type="checkbox" disabled> $1</li>');
+
+	// 7. Unordered lists
+	html = html.replace(/^(?:[*-] .+(?:\n[*-] .+)*)/gm, (match) => {
+		const items = match.split("\n").map(line => `<li>${line.replace(/^[*-] /, "")}</li>`).join("");
+		return `<ul>${items}</ul>`;
+	});
+
+	// 8. Ordered lists
+	html = html.replace(/^(?:\d+\. .+(?:\n\d+\. .+)*)/gm, (match) => {
+		const items = match.split("\n").map(line => `<li>${line.replace(/^\d+\. /, "")}</li>`).join("");
+		return `<ol>${items}</ol>`;
+	});
+
+	// 9. Horizontal rules
+	html = html.replace(/^[-*_]{3,}\s*$/gm, "<hr>");
+
+	// 10. Headers
 	html = html.replace(/^######\s+(.+)$/gm, "<h6>$1</h6>");
 	html = html.replace(/^#####\s+(.+)$/gm, "<h5>$1</h5>");
 	html = html.replace(/^####\s+(.+)$/gm, "<h4>$1</h4>");
@@ -64,37 +114,35 @@ function markdownToBasicHtml(md: string): string {
 	html = html.replace(/^##\s+(.+)$/gm, "<h2>$1</h2>");
 	html = html.replace(/^#\s+(.+)$/gm, "<h1>$1</h1>");
 
-	// Bold and italic
+	// 11. Inline formatting (strikethrough, bold, italic)
+	html = html.replace(/~~(.+?)~~/g, "<del>$1</del>");
 	html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 	html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
 
-	// Images
-	html = html.replace(/<img\s+src="([^"]+)"\s+alt="([^"]*)"\s*\/>/g, '<img src="$1" alt="$2" />');
+	// 12. Images and links
+	html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
+	html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 
-	// Links
-	html = html.replace(
-		/\[([^\]]+)\]\(([^)]+)\)/g,
-		'<a href="$2">$1</a>',
-	);
-
-	// Code blocks
-	html = html.replace(/```(\w*)\n([\s\S]*?)```/g, "<pre><code>$2</code></pre>");
-
-	// Inline code
-	html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-
-	// Paragraphs: wrap lines that aren't already in block elements
+	// 13. Paragraphs
 	html = html
 		.split("\n\n")
 		.map((block) => {
 			const trimmed = block.trim();
 			if (!trimmed) return "";
-			if (/^<(h[1-6]|pre|ul|ol|section|div|img|blockquote|table|nav)/.test(trimmed)) {
+			if (/^<(h[1-6]|pre|ul|ol|li|section|div|img|blockquote|table|nav|hr)/.test(trimmed)) {
 				return trimmed;
 			}
 			return `<p>${trimmed.replace(/\n/g, "<br>")}</p>`;
 		})
 		.join("\n");
+
+	// 14. Restore inline code
+	// eslint-disable-next-line no-control-regex
+	html = html.replace(/\x00IC(\d+)\x00/g, (_match: string, idx: string) => inlineCode[parseInt(idx)]);
+
+	// 15. Restore code blocks
+	// eslint-disable-next-line no-control-regex
+	html = html.replace(/\x00CB(\d+)\x00/g, (_match: string, idx: string) => codeBlocks[parseInt(idx)]);
 
 	return html;
 }

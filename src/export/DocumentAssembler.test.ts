@@ -46,6 +46,21 @@ describe("stripFrontmatter", () => {
 		expect(frontmatter.pi).toBe(3.14);
 		expect(frontmatter.empty).toBeNull();
 	});
+
+	it("strips surrounding quotes from values", () => {
+		const content = '---\ntitle: "Quoted Title"\nauthor: \'Single Quoted\'\n---\nBody';
+		const { frontmatter } = stripFrontmatter(content);
+		expect(frontmatter.title).toBe("Quoted Title");
+		expect(frontmatter.author).toBe("Single Quoted");
+	});
+
+	it("skips nested and array lines", () => {
+		const content = "---\ntitle: Top\ntags:\n  - tag1\n  - tag2\nnested:\n  key: val\n---\nBody";
+		const { frontmatter } = stripFrontmatter(content);
+		expect(frontmatter.title).toBe("Top");
+		expect(frontmatter.tags).toBeNull();
+		expect(frontmatter.nested).toBeNull();
+	});
 });
 
 describe("deriveTitle", () => {
@@ -106,5 +121,14 @@ describe("normalizeHeadings", () => {
 	it("handles empty string", () => {
 		const result = normalizeHeadings("", 2);
 		expect(result).toBe("");
+	});
+
+	it("does not transform headings inside fenced code blocks", () => {
+		const md = "# Real Heading\n```\n# Not A Heading\n## Also Not\n```\n## Another Real";
+		const result = normalizeHeadings(md, 2);
+		expect(result).toContain("## Real Heading");
+		expect(result).toContain("# Not A Heading");
+		expect(result).toContain("## Also Not");
+		expect(result).toContain("### Another Real");
 	});
 });
