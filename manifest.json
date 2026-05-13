@@ -5,5 +5,6 @@
   "minAppVersion": "1.4.0",
   "description": "Export notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.",
   "author": "Roger Deng",
+  "authorUrl": "https://github.com/rogerdigital",
   "isDesktopOnly": false
 }
