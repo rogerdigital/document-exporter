@@ -203,14 +203,15 @@ export class ExportModal extends Modal {
 		currentValue: string,
 		onChange: (value: string) => void,
 	): void {
-		const row = container.createDiv({ cls: "export-modal-folder-picker" });
+		const row = container.createDiv({ cls: "export-modal-row" });
 		row.createEl("label", { text: label });
-		const input = row.createEl("input", { type: "text", cls: "export-modal-folder-input" });
+		const group = row.createDiv({ cls: "export-modal-input-group" });
+		const input = group.createEl("input", { type: "text" });
 		input.value = currentValue;
 		input.addEventListener("input", (e) => {
 			onChange((e.target as HTMLInputElement).value);
 		});
-		const browseBtn = row.createEl("button", { text: "Browse", cls: "export-modal-browse-btn" });
+		const browseBtn = group.createEl("button", { text: "Browse", cls: "export-modal-browse-btn" });
 		browseBtn.addEventListener("click", () => {
 			const picker = new FolderPickerModal(this.app, input.value, (selected) => {
 				input.value = selected;
@@ -223,11 +224,11 @@ export class ExportModal extends Modal {
 	private renderOutputFolderPicker(container: HTMLElement): void {
 		const onChange = (v: string) => { this.outputFolder = v; };
 
-		const row = container.createDiv({ cls: "export-modal-folder-picker" });
+		const row = container.createDiv({ cls: "export-modal-row" });
 		row.createEl("label", { text: "Output folder" });
-		const input = row.createEl("input", {
+		const group = row.createDiv({ cls: "export-modal-input-group" });
+		const input = group.createEl("input", {
 			type: "text",
-			cls: "export-modal-folder-input",
 			attr: { placeholder: Platform.isDesktopApp
 				? "Exports or /users/you/desktop/exports"
 				: "Exports (vault-relative only)" },
@@ -238,7 +239,7 @@ export class ExportModal extends Modal {
 		});
 
 		// Vault folder picker
-		const vaultBtn = row.createEl("button", { text: "Vault", cls: "export-modal-browse-btn" });
+		const vaultBtn = group.createEl("button", { text: "Vault", cls: "export-modal-browse-btn" });
 		vaultBtn.addEventListener("click", () => {
 			const picker = new FolderPickerModal(this.app, input.value, (selected) => {
 				input.value = selected;
@@ -249,7 +250,7 @@ export class ExportModal extends Modal {
 
 		// System folder picker (desktop only)
 		if (Platform.isDesktopApp) {
-			const sysBtn = row.createEl("button", { text: "Choose...", cls: "export-modal-browse-btn" });
+			const sysBtn = group.createEl("button", { text: "Choose folder", cls: "export-modal-browse-btn" });
 			sysBtn.addEventListener("click", () => {
 				void (async () => {
 					try {
