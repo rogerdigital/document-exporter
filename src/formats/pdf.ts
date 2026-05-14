@@ -49,11 +49,12 @@ export async function renderPdf(
 	const htmlBody = `<h1>${escapeHtml(doc.title)}</h1>\n${toc}\n${finalBody}`;
 
 	try {
-		const pdfBuffer = await printViaWebview(htmlBody, cssText + "\n" + printCss);
+		const pdfBuffer = await printViaBrowserWindow(htmlBody, cssText + "\n" + printCss);
 		const filename = plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "");
 		await writer.writeBinary(`${plan.outputRoot}/${filename}.pdf`, pdfBuffer);
 	} catch (err) {
-		warnings.push(`PDF generation failed: ${err instanceof Error ? err.message : String(err)}`);
+		const msg = err instanceof Error ? err.message : String(err);
+		warnings.push(`PDF generation failed: ${msg}`);
 	}
 
 	return warnings;
@@ -102,74 +103,61 @@ async function renderSections(
 	return { html: parts.join("\n"), warnings: allWarnings };
 }
 
-interface WebviewElement extends HTMLElement {
-	src: string;
-	nodeintegration: boolean;
-	insertCSS(css: string): Promise<string>;
-	executeJavaScript(code: string): Promise<unknown>;
-	printToPDF(opts: Record<string, unknown>): Promise<Buffer>;
-	addEventListener(event: string, cb: (e: unknown) => void): void;
-	remove(): void;
-}
+async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Buffer> {
+	const fullHtml = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Export</title><style>${css}</style></head>
+<body class="app-container markdown-rendered">${htmlBody}</body></html>`;
 
-async function printViaWebview(htmlBody: string, css: string): Promise<Buffer> {
-	return new Promise<Buffer>((resolve, reject) => {
-		const webview = document.createElement("webview") as unknown as WebviewElement;
-		webview.setAttribute("style", "position:fixed;left:-9999px;top:-9999px;width:800px;height:1200px;");
-		webview.nodeintegration = true;
-		webview.src = "app://obsidian.md/help.html";
-		document.body.appendChild(webview);
+	const fs = require("fs") as typeof import("fs");
+	const path = require("path") as typeof import("path");
+	const os = require("os") as typeof import("os");
 
-		let settled = false;
-		const cleanup = () => {
-			try { webview.remove(); } catch { /* ignore */ }
-		};
-		const settle = (fn: () => void) => {
-			if (settled) return;
-			settled = true;
-			fn();
-		};
+	const tmpFile = path.join(os.tmpdir(), `obsidian-pdf-export-${Date.now()}.html`);
+	fs.writeFileSync(tmpFile, fullHtml, "utf-8");
 
-		webview.addEventListener("dom-ready", async () => {
-			try {
-				// Inject CSS
-				await webview.insertCSS(css);
+	// Access Electron remote module
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const electron = (window as any).electron || require("electron");
+	const remote = electron.remote;
+	if (!remote) {
+		throw new Error("electron.remote not available — cannot create BrowserWindow");
+	}
 
-				// Inject HTML body content
-				const encoded = encodeContent(htmlBody);
-				await webview.executeJavaScript(`
-					document.body.className = "app-container markdown-rendered";
-					document.body.innerHTML = decodeURIComponent("${encoded}");
-				`);
+	const BrowserWindow = remote.BrowserWindow;
+	if (!BrowserWindow) {
+		throw new Error("BrowserWindow not found on electron.remote");
+	}
 
-				// Wait for rendering to complete
-				await sleep(1500);
-
-				// Generate PDF
-				const pdfBuffer = await webview.printToPDF({
-					printBackground: true,
-					pageSize: "A4",
-				});
-
-				settle(() => { cleanup(); resolve(pdfBuffer); });
-			} catch (err) {
-				settle(() => { cleanup(); reject(err); });
-			}
-		});
-
-		webview.addEventListener("did-fail-load", () => {
-			settle(() => { cleanup(); reject(new Error("Webview failed to load")); });
-		});
-
-		// Timeout
-		setTimeout(() => {
-			settle(() => { cleanup(); reject(new Error("PDF generation timed out (20s)")); });
-		}, 20000);
+	const win = new BrowserWindow({
+		show: false,
+		width: 800,
+		height: 1200,
+		webPreferences: {
+			contextIsolation: false,
+			nodeIntegration: false,
+		},
 	});
-}
 
-function encodeContent(html: string): string {
-	return encodeURIComponent(html);
+	try {
+		await win.loadURL(`file://${tmpFile}`);
+
+		// Wait for page to finish loading and painting
+		await new Promise<void>((resolve) => {
+			win.webContents.on("did-finish-load", () => resolve());
+			setTimeout(resolve, 3000);
+		});
+		await sleep(500);
+
+		const pdfData = await win.webContents.printToPDF({
+			printBackground: true,
+			pageSize: "A4",
+		});
+
+		return Buffer.from(pdfData);
+	} finally {
+		win.close();
+		try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+	}
 }
 
 function sleep(ms: number): Promise<void> {

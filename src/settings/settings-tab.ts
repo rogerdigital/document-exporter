@@ -3,10 +3,10 @@ import { ExportProfileId, ExportSort } from "@/types";
 import type DocumentExporterPlugin from "@/main";
 
 const PROFILE_LABELS: Record<ExportProfileId, string> = {
-	"markdown-bundle": "Markdown bundle",
-	"html-document": "HTML document",
 	pdf: "PDF",
 	docx: "Word document",
+	"markdown-bundle": "Markdown bundle",
+	"html-document": "HTML document",
 };
 
 const SORT_MODES: Record<ExportSort["mode"], string> = {
