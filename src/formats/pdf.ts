@@ -9,6 +9,7 @@ export async function renderPdf(
 	plan: ExportPlan,
 	writer: OutputWriter,
 	app: App,
+	outputFilePath?: string,
 ): Promise<string[]> {
 	const warnings: string[] = [];
 
@@ -52,8 +53,9 @@ export async function renderPdf(
 		if (pdfBuffer.byteLength < MIN_VALID_PDF_BYTES) {
 			throw new Error("generated PDF is unexpectedly small; the print page may be blank");
 		}
-		const filename = plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "");
-		await writer.writeBinary(`${plan.outputRoot}/${filename}.pdf`, pdfBuffer);
+		const resolved = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "")}.pdf`;
+		await writer.ensureFolder(resolved.substring(0, resolved.lastIndexOf("/")));
+		await writer.writeBinary(resolved, pdfBuffer);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		warnings.push(`PDF generation failed: ${msg}`);

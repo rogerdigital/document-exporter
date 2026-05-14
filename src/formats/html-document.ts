@@ -9,6 +9,7 @@ export async function renderHtmlDocument(
 	writer: OutputWriter,
 	printReady = false,
 	app: App | null = null,
+	outputFilePath?: string,
 ): Promise<string[]> {
 	const warnings: string[] = [];
 
@@ -24,8 +25,9 @@ export async function renderHtmlDocument(
 	const customCss = app ? extractObsidianStyles() : null;
 	const html = buildHtmlDoc(doc.title, toc, body, printReady, customCss);
 
-	const filename = plan.outputFilename.replace(/\.(md|html|htm)$/i, '');
-	await writer.writeText(`${plan.outputRoot}/${filename}.html`, html);
+	const resolvedOutput = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm)$/i, '')}.html`;
+	await writer.ensureFolder(resolvedOutput.substring(0, resolvedOutput.lastIndexOf("/")));
+	await writer.writeText(resolvedOutput, html);
 
 	for (const att of doc.attachments) {
 		try {

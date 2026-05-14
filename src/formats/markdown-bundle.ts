@@ -5,6 +5,7 @@ export async function renderMarkdownBundle(
 	doc: AssembledDocument,
 	plan: ExportPlan,
 	writer: OutputWriter,
+	outputFilePath: string,
 ): Promise<string[]> {
 	const warnings: string[] = [];
 
@@ -30,8 +31,7 @@ export async function renderMarkdownBundle(
 	}
 
 	const content = parts.join("\n");
-	const filename = plan.outputFilename.replace(/\.(md|html|htm)$/i, '');
-	await writer.writeText(`${plan.outputRoot}/${filename}.md`, content);
+	await writer.writeText(outputFilePath, content);
 
 	// Copy attachments
 	for (const att of doc.attachments) {

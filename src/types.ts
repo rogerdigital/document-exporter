@@ -18,8 +18,7 @@ export type ExportSettings = {
 export type ExportSource =
 	| { type: "current-file"; path: string }
 	| { type: "files"; paths: string[] }
-	| { type: "folder"; path: string; recursive: boolean }
-	| { type: "filter"; queryText: string; tag?: string };
+	| { type: "folder"; path: string; recursive: boolean };
 
 export type AttachmentCopy = {
 	sourcePath: string;

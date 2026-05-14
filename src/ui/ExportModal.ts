@@ -12,7 +12,6 @@ const SOURCE_OPTIONS = {
 	"current-file": "Current file",
 	folder: "Folder",
 	files: "Selected files",
-	filter: "Filter by tag",
 } as const;
 
 export type ExportModalResult = {
@@ -29,7 +28,6 @@ export class ExportModal extends Modal {
 	private sourceType: string = "current-file";
 	private folderPath = "";
 	private selectedFilePaths: string[] = [];
-	private filterTag = "";
 	private profile: ExportProfileId;
 	private outputFolder: string;
 	private outputFilename: string;
@@ -91,7 +89,10 @@ export class ExportModal extends Modal {
 		const renderSourceFields = () => {
 			sourceFields.empty();
 			if (this.sourceType === "folder") {
-				this.renderFolderPicker(sourceFields, "Folder path", this.folderPath, (v) => { this.folderPath = v; });
+				this.renderFolderPicker(sourceFields, "Folder path", this.folderPath, (v) => {
+					this.folderPath = v;
+					updateDefaultFilename();
+				});
 			} else if (this.sourceType === "files") {
 				const row = sourceFields.createDiv({ cls: "export-modal-row" });
 				row.createEl("label", { text: "Selected files" });
@@ -106,20 +107,13 @@ export class ExportModal extends Modal {
 					});
 					picker.open();
 				});
-			} else if (this.sourceType === "filter") {
-				const row = sourceFields.createDiv({ cls: "export-modal-row" });
-				row.createEl("label", { text: "Tag" });
-				const input = row.createEl("input", { type: "text", attr: { placeholder: "Project" } });
-				input.value = this.filterTag;
-				input.addEventListener("input", (e) => {
-					this.filterTag = (e.target as HTMLInputElement).value;
-				});
 			}
 		};
 
 		sourceSelect.addEventListener("change", () => {
 			this.sourceType = sourceSelect.value;
 			renderSourceFields();
+			updateDefaultFilename();
 		});
 		renderSourceFields();
 
@@ -150,6 +144,18 @@ export class ExportModal extends Modal {
 		filenameInput.addEventListener("input", (e) => {
 			this.outputFilename = (e.target as HTMLInputElement).value;
 		});
+
+		const updateDefaultFilename = () => {
+			if (this.sourceType === "current-file") {
+				const file = this.preselectedFile ?? this.app.workspace.getActiveFile();
+				this.outputFilename = file?.basename ?? "export";
+			} else if (this.sourceType === "folder" && this.folderPath) {
+				this.outputFilename = this.folderPath.split("/").pop() ?? "export";
+			} else {
+				this.outputFilename = "export";
+			}
+			filenameInput.value = this.outputFilename;
+		};
 
 		// Sort mode
 		const sortRow = contentEl.createDiv({ cls: "export-modal-row" });
@@ -284,15 +290,19 @@ export class ExportModal extends Modal {
 
 		const summary = contentEl.createDiv({ cls: "export-confirm-summary" });
 		summary.createEl("p", { text: `Format: ${PROFILE_OPTIONS[result.profile]}` });
-		summary.createEl("p", { text: `Output: ${result.outputFolder}/${result.outputFilename}` });
+
+		const isSingleFile = result.source.type === "current-file";
+		if (isSingleFile) {
+			summary.createEl("p", { text: `Output: ${result.outputFolder}/${result.outputFilename}` });
+		} else {
+			summary.createEl("p", { text: `Output: ${result.outputFolder}/ (preserving directory structure)` });
+		}
+
 		summary.createEl("p", { text: `Source: ${SOURCE_OPTIONS[result.source.type]}` });
 		summary.createEl("p", { text: `Sort: ${result.sort.mode} (${result.sort.direction})` });
 
-
 		if (result.source.type === "folder") {
 			summary.createEl("p", { text: `Folder: ${result.source.path} (recursive: ${result.source.recursive})` });
-		} else if (result.source.type === "filter" && result.source.tag) {
-			summary.createEl("p", { text: `Tag: ${result.source.tag}` });
 		}
 
 		const buttonRow = contentEl.createDiv({ cls: "export-modal-buttons" });
@@ -333,8 +343,6 @@ export class ExportModal extends Modal {
 				return { type: "folder", path: this.folderPath, recursive: true };
 			case "files":
 				return { type: "files", paths: [...this.selectedFilePaths] };
-			case "filter":
-				return { type: "filter", queryText: "", tag: this.filterTag };
 		}
 		return { type: "current-file", path: "" };
 	}

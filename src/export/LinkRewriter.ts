@@ -1,6 +1,6 @@
 import { App } from "obsidian";
 import { ExportProfileId, AttachmentCopy } from "@/types";
-import { normalizePath, extractCodeBlocks, restoreCodeBlocks } from "@/export/utils";
+import { normalizePath, extractCodeBlocks, restoreCodeBlocks, relativePathBetween } from "@/export/utils";
 
 const WIKI_LINK_RE = /\[\[([^\]]+)]]/g;
 const WIKI_EMBED_RE = /!\[\[([^\]]+)]]/g;
@@ -16,12 +16,18 @@ export class LinkRewriter {
 	private exportedPaths: Set<string>;
 	private attachments: Map<string, AttachmentCopy>;
 	private profile: ExportProfileId;
+	private outputRoot: string;
+	private outputPathMap: Map<string, string>;
+	private currentOutputPath: string;
 
 	constructor(
 		app: App,
 		exportedPaths: Set<string>,
 		attachments: AttachmentCopy[],
 		profile: ExportProfileId,
+		outputPathMap: Map<string, string> = new Map(),
+		currentOutputPath: string = "",
+		outputRoot: string = "",
 	) {
 		this.app = app;
 		this.exportedPaths = exportedPaths;
@@ -29,6 +35,9 @@ export class LinkRewriter {
 			attachments.map((a) => [a.sourcePath, a]),
 		);
 		this.profile = profile;
+		this.outputPathMap = outputPathMap;
+		this.currentOutputPath = currentOutputPath;
+		this.outputRoot = outputRoot;
 	}
 
 	rewrite(markdown: string, sourcePath: string): RewriteResult {
@@ -44,7 +53,8 @@ export class LinkRewriter {
 
 			const attachment = this.attachments.get(dest);
 			if (attachment) {
-				return this.formatEmbed(attachment.outputRelativePath, cleanLink);
+				const relPath = this.rewriteAttachmentPath(attachment.outputRelativePath);
+				return this.formatEmbed(relPath, cleanLink);
 			}
 
 			// If it's an included markdown note, leave as link anchor
@@ -69,7 +79,14 @@ export class LinkRewriter {
 			}
 
 			if (this.exportedPaths.has(dest)) {
-				// Link to included note -> convert to anchor
+				// Link to another exported file -> relative path
+				const targetOutput = this.outputPathMap.get(dest);
+				if (targetOutput && this.currentOutputPath) {
+					const relPath = relativePathBetween(this.currentOutputPath, targetOutput);
+					const hash = heading ? `#${slugify(heading)}` : "";
+					return `[${displayText}](${relPath}${hash})`;
+				}
+				// Fallback: anchor (single-file mode)
 				const anchor = heading
 					? `#${slugify(target)}-${slugify(heading)}`
 					: `#${slugify(target)}`;
@@ -78,7 +95,7 @@ export class LinkRewriter {
 
 			const attachment = this.attachments.get(dest);
 			if (attachment) {
-				return `[${displayText}](${attachment.outputRelativePath})`;
+				return `[${displayText}](${this.rewriteAttachmentPath(attachment.outputRelativePath)})`;
 			}
 
 			warnings.push(`Unresolved link: ${target}`);
@@ -96,7 +113,7 @@ export class LinkRewriter {
 
 			const attachment = this.attachments.get(resolved);
 			if (attachment) {
-				return `![${alt}](${attachment.outputRelativePath})`;
+				return `![${alt}](${this.rewriteAttachmentPath(attachment.outputRelativePath)})`;
 			}
 
 			return match;
@@ -125,7 +142,20 @@ export class LinkRewriter {
 		return file ? normalized : null;
 	}
 
-	private formatEmbed(relPath: string, link: string): string {
+	private rewriteAttachmentPath(attRelativePath: string): string {
+			if (!this.currentOutputPath || !this.outputRoot) return attRelativePath;
+			// attRelativePath is relative to outputRoot (e.g., "assets/image.png")
+			// currentOutputPath is e.g., "exports/a/note1.pdf", outputRoot is "exports"
+			// We need the relative path from the output file's directory to the attachment
+			const dirAfterRoot = this.currentOutputPath.startsWith(this.outputRoot + "/")
+				? this.currentOutputPath.slice(this.outputRoot.length + 1)
+				: this.currentOutputPath;
+			const depth = dirAfterRoot.split("/").length - 1; // -1 for the filename
+			if (depth <= 0) return attRelativePath;
+			return "../".repeat(depth) + attRelativePath;
+		}
+
+		private formatEmbed(relPath: string, link: string): string {
 		if (this.profile === "html-document" || this.profile === "pdf" || this.profile === "docx") {
 			const ext = relPath.split(".").pop()?.toLowerCase() ?? "";
 			if (["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp"].includes(ext)) {

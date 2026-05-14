@@ -30,8 +30,6 @@ export class ExportSourceResolver {
 				return this.resolveFiles(source.paths);
 			case "folder":
 				return this.resolveFolder(source.path, source.recursive);
-			case "filter":
-				return this.resolveFilter(source.tag);
 		}
 	}
 
@@ -74,34 +72,6 @@ export class ExportSourceResolver {
 		}
 
 		return files;
-	}
-
-	private resolveFilter(tag?: string): TFile[] {
-		if (!tag) return [];
-
-		const cleanTag = tag.startsWith("#") ? tag.slice(1) : tag;
-		const result: TFile[] = [];
-		const mdFiles = this.app.vault.getMarkdownFiles();
-
-		for (const file of mdFiles) {
-			const cache = this.app.metadataCache.getFileCache(file);
-			if (!cache) continue;
-
-			const hasInlineTag = cache.tags?.some(
-				(t) => t.tag === cleanTag || t.tag === `#${cleanTag}`,
-			);
-
-			const fmTags = cache.frontmatter?.tags as string[] | undefined;
-			const hasFrontmatterTag = fmTags?.some(
-				(t: string) => t === cleanTag || t === `#${cleanTag}`,
-			);
-
-			if (hasInlineTag || hasFrontmatterTag) {
-				result.push(file);
-			}
-		}
-
-		return result;
 	}
 
 	private sortFiles(files: TFile[], sort: ExportSort): TFile[] {

@@ -1,5 +1,6 @@
 import { ExportPlan, ExportProfileId, ExportSource, ExportSort } from "@/types";
 import { App } from "obsidian";
+import { extensionForProfile, longestCommonDirPrefix } from "@/export/utils";
 
 export class ExportPlanBuilder {
 	private app: App;
@@ -45,17 +46,27 @@ export class ExportPlanBuilder {
 	}
 
 	private computeOutputFiles(): string[] {
-		const baseName = this.stripExtension(this.outputFilename);
-		switch (this.profile) {
-			case "markdown-bundle":
-				return [`${this.outputRoot}/${baseName}.md`];
-			case "html-document":
-				return [`${this.outputRoot}/${baseName}.html`];
-			case "pdf":
-				return [`${this.outputRoot}/${baseName}.pdf`];
-			case "docx":
-				return [`${this.outputRoot}/${baseName}.docx`];
+		const ext = extensionForProfile(this.profile);
+
+		if (this.source.type === "current-file") {
+			const baseName = this.stripExtension(this.outputFilename);
+			return [`${this.outputRoot}/${baseName}.${ext}`];
 		}
+
+		if (this.source.type === "folder") {
+			const prefix = this.source.path ? this.source.path + "/" : "";
+			return this.inputFiles.map(p => {
+				const rel = prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
+				return `${this.outputRoot}/${rel.replace(/\.md$/i, `.${ext}`)}`;
+			});
+		}
+
+		// files: strip longest common directory prefix
+		const prefix = longestCommonDirPrefix(this.inputFiles);
+		return this.inputFiles.map(p => {
+			const rel = prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
+			return `${this.outputRoot}/${rel.replace(/\.md$/i, `.${ext}`)}`;
+		});
 	}
 
 	private stripExtension(name: string): string {

@@ -36,7 +36,7 @@ export class DocumentAssembler {
 		const raw = await this.app.vault.read(file);
 		const { body, frontmatter } = stripFrontmatter(raw);
 		const sectionTitle = deriveTitle(file, frontmatter, body);
-		const normalized = normalizeHeadings(body, 2);
+		const normalized = normalizeHeadings(body, 1);
 		const markdown = this.includeSourcePaths
 			? `<!-- source: ${file.path} -->\n${normalized}`
 			: normalized;
