@@ -1,11 +1,14 @@
+import { App } from "obsidian";
 import { AssembledDocument, ExportPlan, DocumentSection } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
+import { renderMarkdownNative, extractObsidianStyles, rewriteAppProtocolUrls } from "@/formats/native-renderer";
 
 export async function renderHtmlDocument(
 	doc: AssembledDocument,
 	plan: ExportPlan,
 	writer: OutputWriter,
 	printReady = false,
+	app: App | null = null,
 ): Promise<string[]> {
 	const warnings: string[] = [];
 
@@ -14,9 +17,12 @@ export async function renderHtmlDocument(
 		await writer.ensureFolder(`${plan.outputRoot}/assets`);
 	}
 
-	const toc = generateToc(doc.sections);
-	const body = renderSections(doc.sections);
-	const html = buildHtmlDoc(doc.title, toc, body, printReady);
+	const toc = doc.sections.length > 1 ? generateToc(doc.sections) : "";
+	const { html: body, warnings: renderWarnings } = await renderSections(doc.sections, app, doc.title);
+	warnings.push(...renderWarnings);
+
+	const customCss = app ? extractObsidianStyles() : null;
+	const html = buildHtmlDoc(doc.title, toc, body, printReady, customCss);
 
 	const filename = plan.outputFilename.replace(/\.(md|html|htm)$/i, '');
 	await writer.writeText(`${plan.outputRoot}/${filename}.html`, html);
@@ -43,22 +49,47 @@ function generateToc(sections: DocumentSection[]): string {
 	return `<nav class="toc"><h2>Table of Contents</h2><ol>${items.join("")}</ol></nav>`;
 }
 
-function renderSections(sections: DocumentSection[]): string {
-	return sections
-		.map((s, i) => {
-			const id = `section-${i}`;
-			const html = markdownToBasicHtml(s.markdown);
-			return `<section id="${id}"><h2>${escapeHtml(s.title)}</h2>${html}</section>`;
-		})
-		.join("\n");
+async function renderSections(
+	sections: DocumentSection[],
+	app: App | null,
+	docTitle: string,
+): Promise<{ html: string; warnings: string[] }> {
+	const allWarnings: string[] = [];
+	const parts: string[] = [];
+	const isSingleSection = sections.length === 1;
+
+	for (let i = 0; i < sections.length; i++) {
+		const s = sections[i];
+		const id = `section-${i}`;
+		let sectionHtml: string;
+
+		if (app && typeof document !== "undefined") {
+			try {
+				const result = await renderMarkdownNative(app, s.markdown, s.sourcePath);
+				sectionHtml = rewriteAppProtocolUrls(result.html, []);
+				allWarnings.push(...result.warnings);
+			} catch {
+				sectionHtml = markdownToBasicHtml(s.markdown);
+				allWarnings.push(`Native rendering failed for "${s.sourcePath}", using basic converter`);
+			}
+		} else {
+			sectionHtml = markdownToBasicHtml(s.markdown);
+		}
+
+		const skipHeading = isSingleSection && s.title === docTitle;
+		const heading = skipHeading ? "" : `<h2>${escapeHtml(s.title)}</h2>`;
+		parts.push(`<section id="${id}">${heading}${sectionHtml}</section>`);
+	}
+
+	return { html: parts.join("\n"), warnings: allWarnings };
 }
 
-function markdownToBasicHtml(md: string): string {
+export function markdownToBasicHtml(md: string): string {
 	// 1. Extract fenced code blocks
 	const codeBlocks: string[] = [];
 	let html = md.replace(/```(\w*)\n([\s\S]*?)```/g, (_match: string, _lang: string, code: string) => {
 		codeBlocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
-		return `CB${codeBlocks.length - 1}`;
+		return `CB${codeBlocks.length - 1}`;
 	});
 
 	// 2. Extract inline code
@@ -137,15 +168,15 @@ function markdownToBasicHtml(md: string): string {
 		.join("\n");
 
 	// 14. Restore inline code
-	html = html.replace(/IC(\d+)/g, (_match: string, idx: string) => inlineCode[parseInt(idx)]);
+	html = html.replace(/IC(\d+)/g, (_match: string, idx: string) => inlineCode[parseInt(idx)]);
 
 	// 15. Restore code blocks
-	html = html.replace(/CB(\d+)/g, (_match: string, idx: string) => codeBlocks[parseInt(idx)]);
+	html = html.replace(/CB(\d+)/g, (_match: string, idx: string) => codeBlocks[parseInt(idx)]);
 
 	return html;
 }
 
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
 	return text
 		.replace(/&/g, "&amp;")
 		.replace(/</g, "&lt;")
@@ -153,11 +184,25 @@ function escapeHtml(text: string): string {
 		.replace(/"/g, "&quot;");
 }
 
-function buildHtmlDoc(
+const DEFAULT_CSS = `body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #1a1a1a; }
+h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; }
+section { margin-top: 2em; }
+pre { background: #f5f5f5; padding: 1em; overflow-x: auto; border-radius: 4px; }
+code { background: #f5f5f5; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
+img { max-width: 100%; height: auto; }
+a { color: #0366d6; }
+.toc { background: #f8f9fa; padding: 1em 1.5em; border-radius: 4px; margin-bottom: 2em; }
+.toc h2 { margin-top: 0; }
+.toc ol { padding-left: 1.5em; }
+.toc li { margin: 0.3em 0; }
+blockquote { border-left: 4px solid #ddd; margin: 1em 0; padding: 0.5em 1em; color: #555; }`;
+
+export function buildHtmlDoc(
 	title: string,
 	toc: string,
 	body: string,
 	printReady: boolean,
+	customCss: string | null = null,
 ): string {
 	const printCss = printReady
 		? `
@@ -177,6 +222,9 @@ function buildHtmlDoc(
 		? `<div class="title-page"><h1>${escapeHtml(title)}</h1></div>`
 		: "";
 
+	const css = customCss ?? DEFAULT_CSS;
+	const bodyClass = customCss ? "app-container markdown-rendered" : "";
+
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -184,22 +232,12 @@ function buildHtmlDoc(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #1a1a1a; }
-h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; }
-section { margin-top: 2em; }
-pre { background: #f5f5f5; padding: 1em; overflow-x: auto; border-radius: 4px; }
-code { background: #f5f5f5; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
-img { max-width: 100%; height: auto; }
-a { color: #0366d6; }
-.toc { background: #f8f9fa; padding: 1em 1.5em; border-radius: 4px; margin-bottom: 2em; }
-.toc h2 { margin-top: 0; }
-.toc ol { padding-left: 1.5em; }
-.toc li { margin: 0.3em 0; }
-blockquote { border-left: 4px solid #ddd; margin: 1em 0; padding: 0.5em 1em; color: #555; }
+${css}
 ${printCss}
+${customCss ? `body { padding: 2rem; max-width: 800px; margin: 0 auto; }` : ""}
 </style>
 </head>
-<body>
+<body class="${bodyClass}">
 <h1>${escapeHtml(title)}</h1>
 ${titlePage}
 ${toc}

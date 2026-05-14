@@ -51,6 +51,7 @@ export class ExportPlanBuilder {
 				return [`${this.outputRoot}/${baseName}.md`];
 			case "html-document":
 			case "print-html":
+			case "single-file-html":
 				return [`${this.outputRoot}/${baseName}.html`];
 		}
 	}

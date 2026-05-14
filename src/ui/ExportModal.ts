@@ -5,6 +5,7 @@ const PROFILE_OPTIONS: Record<ExportProfileId, string> = {
 	"markdown-bundle": "Markdown bundle",
 	"html-document": "HTML document",
 	"print-html": "Print-ready HTML",
+	"single-file-html": "Single-file HTML",
 };
 
 const SOURCE_OPTIONS = {
@@ -187,8 +188,8 @@ export class ExportModal extends Modal {
 		const buttonRow = contentEl.createDiv({ cls: "export-modal-buttons" });
 		const cancelButton = buttonRow.createEl("button", { text: "Cancel" });
 		cancelButton.addEventListener("click", () => {
+			this.resolve = null;
 			this.close();
-			this.resolve?.(null);
 		});
 		const exportButton = buttonRow.createEl("button", { text: "Next", cls: "mod-cta" });
 		exportButton.addEventListener("click", () => {
@@ -301,8 +302,10 @@ export class ExportModal extends Modal {
 		});
 		const confirmButton = buttonRow.createEl("button", { text: "Export", cls: "mod-cta" });
 		confirmButton.addEventListener("click", () => {
+			const resolveRef = this.resolve;
+			this.resolve = null;
 			this.close();
-			this.resolve?.(result);
+			resolveRef?.(result);
 		});
 	}
 
