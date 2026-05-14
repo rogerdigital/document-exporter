@@ -4,10 +4,10 @@ Export notes, folders, and filtered results into PDF, Word, Markdown bundles, an
 
 ## Features
 
-- **PDF** — generates a printable `.pdf` directly from selected notes
+- **PDF** — generates a print-ready `.pdf` with native Obsidian rendering
 - **Word document** — generates a `.docx` document for editing and sharing
 - **Markdown bundle** — combines selected notes into a single `.md` file with copied attachments and rewritten links
-- **HTML document** — generates a standalone `.html` with table of contents and linked assets
+- **HTML document** — generates a standalone `.html` with table of contents, native rendering, and linked assets
 
 ## Usage
 
@@ -23,7 +23,7 @@ Multiple ways to start an export:
 
 ### Export dialog
 
-![Export dialog](docs/screenshots/document-exporter-main-panel.png)
+<img src="docs/screenshots/document-exporter-main-panel.png" width="560" />
 
 1. Choose **source** — current file, folder, selected files, or tag filter
 2. Choose **format** — PDF, Word document, Markdown bundle, or HTML document
@@ -35,25 +35,25 @@ A notification shows the output path when export completes.
 
 ## Examples
 
-### Export the current note as Markdown
+### Export the current note as PDF
 
 1. Open a note → right-click → **Export current file**
-2. Format: **Markdown bundle**, output: `exports`
-3. Click **Export**
-4. Result: `exports/<filename>.md` + `exports/assets/` (if images exist)
+2. Format: **PDF** → click **Export**
+3. Result: `exports/<filename>.pdf`
 
-### Export a folder as HTML
+### Export a folder as Markdown bundle
 
 1. Right-click a folder → **Export this folder**
-2. Format: **HTML document**
+2. Format: **Markdown bundle**
 3. Click **Export**
-4. Result: a standalone `.html` with all notes combined and a table of contents
+4. Result: `exports/<foldername>.md` + `exports/assets/` (if images exist)
 
-### Export notes as PDF
+### Export filtered notes as HTML
 
 1. Start an export from sidebar icon or command palette
-2. Format: **PDF** → click **Export**
-3. Result: `<filename>.pdf`
+2. Source: **Filter by tag**, Format: **HTML document**
+3. Click **Export**
+4. Result: a standalone `.html` with all matched notes combined and a table of contents
 
 ## Settings
 
@@ -73,7 +73,7 @@ Open **Settings → Document Exporter**.
 - Inline note embeds (`![[Note]]`) are preserved as links, not expanded
 - Dataview queries are not executed during export
 - Canvas files are not supported
-- The built-in Markdown-to-HTML converter handles common syntax but not all Obsidian-specific rendering (callouts, mermaid, math)
+- PDF export requires the desktop app
 
 ## Privacy
 
