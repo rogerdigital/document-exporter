@@ -6,8 +6,8 @@ import { LinkRewriter } from "@/export/LinkRewriter";
 import { OutputWriter } from "@/export/OutputWriter";
 import { renderMarkdownBundle } from "@/formats/markdown-bundle";
 import { renderHtmlDocument } from "@/formats/html-document";
-import { renderPrintHtml } from "@/formats/print-html";
-import { renderSingleFileHtml } from "@/formats/single-file-html";
+import { renderPdf } from "@/formats/pdf";
+import { renderDocx } from "@/formats/docx";
 
 export interface ExportResult {
 	success: boolean;
@@ -118,24 +118,20 @@ export class ExportRunner {
 			case "html-document":
 				formatWarnings = await renderHtmlDocument(doc, effectivePlan, writer, false, this.app);
 				break;
-			case "print-html":
-				formatWarnings = await renderPrintHtml(doc, effectivePlan, writer, this.app);
+			case "pdf":
+				formatWarnings = await renderPdf(doc, effectivePlan, writer, this.app);
 				break;
-			case "single-file-html":
-				formatWarnings = await renderSingleFileHtml(doc, effectivePlan, writer, this.app);
+			case "docx":
+				formatWarnings = await renderDocx(doc, effectivePlan, writer, this.app);
 				break;
 		}
 		allWarnings.push(...formatWarnings);
 
 		// Write export report
 		if (allWarnings.length > 0) {
-			let report = allWarnings
+			const report = allWarnings
 				.map((w, i) => `${i + 1}. ${w}`)
 				.join("\n");
-
-			if (effectivePlan.profile === "print-html") {
-				report += "\n\n## Print Instructions\n\nOpen `index.html` in a browser and use File > Print (or Cmd/Ctrl+P) to save as PDF.\n";
-			}
 
 			await writer.writeText(
 				`${effectivePlan.outputRoot}/export-report.md`,

@@ -4,8 +4,8 @@ import { ExportProfileId, ExportSettings, ExportSource, ExportSort } from "@/typ
 const PROFILE_OPTIONS: Record<ExportProfileId, string> = {
 	"markdown-bundle": "Markdown bundle",
 	"html-document": "HTML document",
-	"print-html": "Print-ready HTML",
-	"single-file-html": "Single-file HTML",
+	pdf: "PDF",
+	docx: "Word document",
 };
 
 const SOURCE_OPTIONS = {

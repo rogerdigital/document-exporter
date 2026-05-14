@@ -1,4 +1,4 @@
-export type ExportProfileId = "markdown-bundle" | "html-document" | "print-html" | "single-file-html";
+export type ExportProfileId = "markdown-bundle" | "html-document" | "pdf" | "docx";
 
 export type ExportSort = {
 	mode: "path" | "name" | "frontmatter";

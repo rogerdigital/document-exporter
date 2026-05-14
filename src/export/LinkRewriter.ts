@@ -126,7 +126,7 @@ export class LinkRewriter {
 	}
 
 	private formatEmbed(relPath: string, link: string): string {
-		if (this.profile === "html-document" || this.profile === "print-html" || this.profile === "single-file-html") {
+		if (this.profile === "html-document" || this.profile === "pdf" || this.profile === "docx") {
 			const ext = relPath.split(".").pop()?.toLowerCase() ?? "";
 			if (["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp"].includes(ext)) {
 				return `<img src="${relPath}" alt="${link}" />`;
