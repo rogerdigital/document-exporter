@@ -5,8 +5,8 @@ import type DocumentExporterPlugin from "@/main";
 const PROFILE_LABELS: Record<ExportProfileId, string> = {
 	"markdown-bundle": "Markdown bundle",
 	"html-document": "HTML document",
-	"print-html": "Print-ready HTML",
-	"single-file-html": "Single-file HTML",
+	pdf: "PDF",
+	docx: "Word document",
 };
 
 const SORT_MODES: Record<ExportSort["mode"], string> = {

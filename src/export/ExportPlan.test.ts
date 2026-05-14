@@ -133,11 +133,11 @@ describe("ExportPlanBuilder", () => {
 		expect(plan.outputFiles).toEqual(["output/index.html"]);
 	});
 
-	it("produces correct outputFiles for print-html profile", () => {
+	it("produces correct outputFiles for pdf profile", () => {
 		const plan = new ExportPlanBuilder(
 			mockApp,
 			defaultSource,
-			"print-html",
+			"pdf",
 			"output",
 			defaultSort,
 			"index",
@@ -145,8 +145,24 @@ describe("ExportPlanBuilder", () => {
 			.setInputFiles(["note.md"])
 			.build();
 
-		expect(plan.profile).toBe("print-html");
-		expect(plan.outputFiles).toEqual(["output/index.html"]);
+		expect(plan.profile).toBe("pdf");
+		expect(plan.outputFiles).toEqual(["output/index.pdf"]);
+	});
+
+	it("produces correct outputFiles for docx profile", () => {
+		const plan = new ExportPlanBuilder(
+			mockApp,
+			defaultSource,
+			"docx",
+			"output",
+			defaultSort,
+			"index",
+		)
+			.setInputFiles(["note.md"])
+			.build();
+
+		expect(plan.profile).toBe("docx");
+		expect(plan.outputFiles).toEqual(["output/index.docx"]);
 	});
 
 	it("passes through all builder fields", () => {

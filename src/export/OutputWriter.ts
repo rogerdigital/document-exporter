@@ -49,6 +49,22 @@ export class OutputWriter {
 		}
 	}
 
+	async writeBinary(filePath: string, data: ArrayBuffer | Buffer | Uint8Array): Promise<void> {
+		if (this.isExternal(filePath)) {
+			if (!nodeFs) return;
+			nodeFs.writeFileSync(filePath, new Uint8Array(data as ArrayBuffer));
+			return;
+		}
+
+		const buffer = data instanceof ArrayBuffer ? data : (data as Uint8Array).buffer as ArrayBuffer;
+		const existing = this.app.vault.getAbstractFileByPath(filePath);
+		if (existing instanceof TFile) {
+			await this.app.vault.modifyBinary(existing, buffer);
+		} else {
+			await this.app.vault.createBinary(filePath, buffer);
+		}
+	}
+
 	async copyBinaryFile(sourcePath: string, destPath: string): Promise<void> {
 		const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
 		if (!(sourceFile instanceof TFile)) return;

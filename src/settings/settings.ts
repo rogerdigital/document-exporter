@@ -1,10 +1,16 @@
-import { ExportSettings, DEFAULT_SETTINGS } from "@/types";
+import { ExportSettings, ExportProfileId, DEFAULT_SETTINGS } from "@/types";
 import { Plugin } from "obsidian";
+
+const VALID_PROFILES: Set<string> = new Set<ExportProfileId>(["markdown-bundle", "html-document", "pdf", "docx"]);
 
 export async function loadSettings(
 	plugin: Plugin,
 ): Promise<ExportSettings> {
-	return Object.assign({}, DEFAULT_SETTINGS, await plugin.loadData() as Partial<ExportSettings>);
+	const data = Object.assign({}, DEFAULT_SETTINGS, await plugin.loadData() as Partial<ExportSettings>);
+	if (!VALID_PROFILES.has(data.defaultProfile)) {
+		data.defaultProfile = "html-document";
+	}
+	return data;
 }
 
 export async function saveSettings(

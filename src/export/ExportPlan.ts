@@ -50,14 +50,16 @@ export class ExportPlanBuilder {
 			case "markdown-bundle":
 				return [`${this.outputRoot}/${baseName}.md`];
 			case "html-document":
-			case "print-html":
-			case "single-file-html":
 				return [`${this.outputRoot}/${baseName}.html`];
+			case "pdf":
+				return [`${this.outputRoot}/${baseName}.pdf`];
+			case "docx":
+				return [`${this.outputRoot}/${baseName}.docx`];
 		}
 	}
 
 	private stripExtension(name: string): string {
-		return name.replace(/\.(md|html|htm)$/i, "");
+		return name.replace(/\.(md|html|htm|pdf|docx)$/i, "");
 	}
 }
 
