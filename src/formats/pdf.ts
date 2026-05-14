@@ -1,7 +1,7 @@
 import { App, Platform } from "obsidian";
 import { AssembledDocument, DocumentSection, ExportPlan } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
-import { renderMarkdownNative, extractObsidianStyles, rewriteAppProtocolUrls } from "@/formats/native-renderer";
+import { renderMarkdownNative, rewriteAppProtocolUrls } from "@/formats/native-renderer";
 import { markdownToBasicHtml, escapeHtml } from "@/formats/html-document";
 
 export async function renderPdf(
@@ -42,14 +42,16 @@ export async function renderPdf(
 		}
 	}
 
-	const customCss = typeof document !== "undefined" ? extractObsidianStyles() : null;
-	const cssText = customCss ?? DEFAULT_CSS;
+	const cssText = DEFAULT_CSS;
 	const printCss = PRINT_CSS;
 
 	const htmlBody = `<h1>${escapeHtml(doc.title)}</h1>\n${toc}\n${finalBody}`;
 
 	try {
 		const pdfBuffer = await printViaBrowserWindow(htmlBody, cssText + "\n" + printCss);
+		if (pdfBuffer.byteLength < MIN_VALID_PDF_BYTES) {
+			throw new Error("generated PDF is unexpectedly small; the print page may be blank");
+		}
 		const filename = plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "");
 		await writer.writeBinary(`${plan.outputRoot}/${filename}.pdf`, pdfBuffer);
 	} catch (err) {
@@ -103,11 +105,15 @@ async function renderSections(
 	return { html: parts.join("\n"), warnings: allWarnings };
 }
 
-async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Buffer> {
-	const fullHtml = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Export</title><style>${css}</style></head>
-<body class="app-container markdown-rendered">${htmlBody}</body></html>`;
+export function buildPdfHtml(htmlBody: string, css: string): string {
+	return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Export</title><style>${css}
+${PDF_PAGE_RESET_CSS}</style></head>
+<body><main class="pdf-export-page markdown-rendered">${htmlBody}</main></body></html>`;
+}
 
+async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Buffer> {
+	const fullHtml = buildPdfHtml(htmlBody, css);
 	const fs = require("fs") as typeof import("fs");
 	const path = require("path") as typeof import("path");
 	const os = require("os") as typeof import("os");
@@ -129,7 +135,13 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Buf
 	}
 
 	const win = new BrowserWindow({
-		show: false,
+		show: true,
+		frame: false,
+		skipTaskbar: true,
+		focusable: false,
+		transparent: true,
+		backgroundColor: "#ffffff",
+		opacity: 0.01,
 		width: 800,
 		height: 1200,
 		webPreferences: {
@@ -140,17 +152,21 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Buf
 
 	try {
 		await win.loadURL(`file://${tmpFile}`);
+		if (typeof win.showInactive === "function") {
+			win.showInactive();
+		}
 
-		// Wait for page to finish loading and painting
-		await new Promise<void>((resolve) => {
-			win.webContents.on("did-finish-load", () => resolve());
-			setTimeout(resolve, 3000);
-		});
-		await sleep(500);
+		await waitForPrintableContent(win);
 
 		const pdfData = await win.webContents.printToPDF({
 			printBackground: true,
 			pageSize: "A4",
+			margins: {
+				top: 0,
+				bottom: 0,
+				left: 0,
+				right: 0,
+			},
 		});
 
 		return Buffer.from(pdfData);
@@ -160,8 +176,36 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Buf
 	}
 }
 
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
+async function waitForPrintableContent(win: { webContents: { executeJavaScript: <T>(code: string) => Promise<T> } }): Promise<void> {
+	const printable = await win.webContents.executeJavaScript<{
+		textLength: number;
+		width: number;
+		height: number;
+	}>(
+		`new Promise((resolve) => {
+			const done = () => {
+				requestAnimationFrame(() => {
+					requestAnimationFrame(() => {
+						const rect = document.body.getBoundingClientRect();
+						resolve({
+							textLength: document.body.innerText.trim().length,
+							width: rect.width,
+							height: rect.height,
+						});
+					});
+				});
+			};
+			if (document.readyState === "complete") {
+				done();
+			} else {
+				window.addEventListener("load", done, { once: true });
+			}
+		})`,
+	);
+
+	if (printable.textLength === 0 || printable.width === 0 || printable.height === 0) {
+		throw new Error("print page has no visible content");
+	}
 }
 
 const DEFAULT_CSS = `body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #1a1a1a; }
@@ -185,6 +229,42 @@ const PRINT_CSS = `
 	img { max-width: 100%; page-break-inside: avoid; }
 	.toc { page-break-after: always; }
 }`;
+
+const PDF_PAGE_RESET_CSS = `
+@page {
+	margin: 0;
+}
+
+html,
+body {
+	width: auto !important;
+	height: auto !important;
+	min-height: 100% !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	overflow: visible !important;
+	contain: none !important;
+	user-select: text !important;
+	background: #fff !important;
+	color: #1a1a1a !important;
+}
+
+body,
+.pdf-export-page {
+	display: block !important;
+}
+
+.pdf-export-page {
+	box-sizing: border-box;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	line-height: 1.6;
+	max-width: 800px;
+	margin: 0 auto;
+	padding: 1.35cm 1.6cm;
+}
+`;
+
+const MIN_VALID_PDF_BYTES = 1024;
 
 function mimeFromExt(ext: string): string {
 	const map: Record<string, string> = {
