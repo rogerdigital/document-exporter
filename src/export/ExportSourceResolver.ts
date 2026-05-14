@@ -1,5 +1,5 @@
 import { App, TAbstractFile, TFile, TFolder } from "obsidian";
-import { ExportSource, ExportSort } from "@/types";
+import { ExportSource } from "@/types";
 
 function isTFile(f: TAbstractFile | null): f is TFile {
 	return f !== null && "extension" in f;
@@ -16,10 +16,8 @@ export class ExportSourceResolver {
 		this.app = app;
 	}
 
-	resolve(source: ExportSource, sort: ExportSort): TFile[] {
-		const files = this.collectFiles(source);
-		const sorted = this.sortFiles(files, sort);
-		return sorted;
+	resolve(source: ExportSource): TFile[] {
+		return this.collectFiles(source);
 	}
 
 	private collectFiles(source: ExportSource): TFile[] {
@@ -74,38 +72,4 @@ export class ExportSourceResolver {
 		return files;
 	}
 
-	private sortFiles(files: TFile[], sort: ExportSort): TFile[] {
-		const sorted = [...files];
-
-		const compare = (a: TFile, b: TFile): number => {
-			let result = 0;
-
-			switch (sort.mode) {
-				case "path":
-					result = a.path.localeCompare(b.path);
-					break;
-				case "name":
-					result = a.basename.localeCompare(b.basename);
-					break;
-				case "frontmatter": {
-					const key = sort.frontmatterKey ?? "title";
-					const aVal = this.getFrontmatterValue(a, key);
-					const bVal = this.getFrontmatterValue(b, key);
-					const toStr = (v: unknown) => v != null ? (typeof v === "string" ? v : JSON.stringify(v)) : "";
-					result = toStr(aVal).localeCompare(toStr(bVal));
-					break;
-				}
-			}
-
-			return sort.direction === "desc" ? -result : result;
-		};
-
-		sorted.sort(compare);
-		return sorted;
-	}
-
-	private getFrontmatterValue(file: TFile, key: string): unknown {
-		const cache = this.app.metadataCache.getFileCache(file);
-		return cache?.frontmatter?.[key];
-	}
 }

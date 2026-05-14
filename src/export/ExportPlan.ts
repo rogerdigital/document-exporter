@@ -1,4 +1,4 @@
-import { ExportPlan, ExportProfileId, ExportSource, ExportSort } from "@/types";
+import { ExportPlan, ExportProfileId, ExportSource } from "@/types";
 import { App } from "obsidian";
 import { extensionForProfile, longestCommonDirPrefix } from "@/export/utils";
 
@@ -7,7 +7,6 @@ export class ExportPlanBuilder {
 	private source: ExportSource;
 	private profile: ExportProfileId;
 	private outputRoot: string;
-	private sort: ExportSort;
 	private outputFilename: string;
 	private inputFiles: string[] = [];
 
@@ -16,14 +15,12 @@ export class ExportPlanBuilder {
 		source: ExportSource,
 		profile: ExportProfileId,
 		outputRoot: string,
-		sort: ExportSort,
 		outputFilename: string,
 	) {
 		this.app = app;
 		this.source = source;
 		this.profile = profile;
 		this.outputRoot = outputRoot;
-		this.sort = sort;
 		this.outputFilename = outputFilename;
 	}
 
@@ -41,7 +38,6 @@ export class ExportPlanBuilder {
 			outputFilename: this.outputFilename,
 			outputFiles: this.computeOutputFiles(),
 			attachmentCopies: [],
-			sort: this.sort,
 		};
 	}
 

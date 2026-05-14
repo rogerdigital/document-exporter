@@ -78,7 +78,7 @@ export default class DocumentExporterPlugin extends Plugin {
 
 		try {
 			const resolver = new ExportSourceResolver(this.app);
-			const files = resolver.resolve(result.source, result.sort);
+			const files = resolver.resolve(result.source);
 			progress.start(files.length);
 
 			const plan = new ExportPlanBuilder(
@@ -86,7 +86,6 @@ export default class DocumentExporterPlugin extends Plugin {
 				result.source,
 				result.profile,
 				result.outputFolder,
-				result.sort,
 				result.outputFilename,
 			)
 				.setInputFiles(files.map((f) => f.path))

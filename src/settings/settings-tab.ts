@@ -1,5 +1,5 @@
 import { PluginSettingTab, App, Setting, debounce } from "obsidian";
-import { ExportProfileId, ExportSort } from "@/types";
+import { ExportProfileId } from "@/types";
 import type DocumentExporterPlugin from "@/main";
 
 const PROFILE_LABELS: Record<ExportProfileId, string> = {
@@ -7,12 +7,6 @@ const PROFILE_LABELS: Record<ExportProfileId, string> = {
 	docx: "Word document",
 	"markdown-bundle": "Markdown bundle",
 	"html-document": "HTML document",
-};
-
-const SORT_MODES: Record<ExportSort["mode"], string> = {
-	path: "File path",
-	name: "File name",
-	frontmatter: "Frontmatter field",
 };
 
 export class DocumentExporterSettingTab extends PluginSettingTab {
@@ -52,18 +46,6 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 				dd.setValue(this.plugin.settings.defaultProfile);
 				dd.onChange(async (v) => {
 					this.plugin.settings.defaultProfile = v as ExportProfileId;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(containerEl)
-			.setName("Default sort mode")
-			.setDesc("How notes are ordered in the exported document.")
-			.addDropdown((dd) => {
-				dd.addOptions(SORT_MODES);
-				dd.setValue(this.plugin.settings.defaultSort.mode);
-				dd.onChange(async (v) => {
-					this.plugin.settings.defaultSort.mode = v as ExportSort["mode"];
 					await this.plugin.saveSettings();
 				});
 			});

@@ -4,7 +4,7 @@ import {
 	summarizePlan,
 	ExportPlanBuilder,
 } from "@/export/ExportPlan";
-import { ExportPlan, ExportSort, ExportSource } from "@/types";
+import { ExportPlan, ExportSource } from "@/types";
 
 function makePlan(overrides: Partial<ExportPlan> = {}): ExportPlan {
 	return {
@@ -15,7 +15,6 @@ function makePlan(overrides: Partial<ExportPlan> = {}): ExportPlan {
 		outputFilename: "document",
 		outputFiles: ["exports/document.md"],
 		attachmentCopies: [],
-		sort: { mode: "path", direction: "asc" },
 		...overrides,
 	};
 }
@@ -99,7 +98,6 @@ describe("ExportPlanBuilder", () => {
 	} as never;
 
 	const defaultSource: ExportSource = { type: "current-file", path: "note.md" };
-	const defaultSort: ExportSort = { mode: "path", direction: "asc" };
 
 	it("produces correct outputFiles for markdown-bundle profile", () => {
 		const plan = new ExportPlanBuilder(
@@ -107,7 +105,6 @@ describe("ExportPlanBuilder", () => {
 			defaultSource,
 			"markdown-bundle",
 			"exports",
-			defaultSort,
 			"document",
 		)
 			.setInputFiles(["note.md"])
@@ -123,7 +120,6 @@ describe("ExportPlanBuilder", () => {
 			defaultSource,
 			"html-document",
 			"output",
-			defaultSort,
 			"index",
 		)
 			.setInputFiles(["note.md"])
@@ -139,7 +135,6 @@ describe("ExportPlanBuilder", () => {
 			defaultSource,
 			"pdf",
 			"output",
-			defaultSort,
 			"index",
 		)
 			.setInputFiles(["note.md"])
@@ -155,7 +150,6 @@ describe("ExportPlanBuilder", () => {
 			defaultSource,
 			"docx",
 			"output",
-			defaultSort,
 			"index",
 		)
 			.setInputFiles(["note.md"])
@@ -171,7 +165,6 @@ describe("ExportPlanBuilder", () => {
 			defaultSource,
 			"markdown-bundle",
 			"exports",
-			defaultSort,
 			"document",
 		)
 			.setInputFiles(["a.md", "b.md"])
@@ -181,7 +174,6 @@ describe("ExportPlanBuilder", () => {
 		expect(plan.inputFiles).toEqual(["a.md", "b.md"]);
 		expect(plan.outputRoot).toBe("exports");
 		expect(plan.outputFilename).toBe("document");
-		expect(plan.sort).toBe(defaultSort);
 		expect(plan.attachmentCopies).toEqual([]);
 	});
 
@@ -191,7 +183,6 @@ describe("ExportPlanBuilder", () => {
 			defaultSource,
 			"markdown-bundle",
 			"exports",
-			defaultSort,
 			"my-note.md",
 		)
 			.setInputFiles(["note.md"])
