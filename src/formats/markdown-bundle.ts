@@ -20,8 +20,11 @@ export async function renderMarkdownBundle(
 	const parts: string[] = [];
 	parts.push(`# ${doc.title}\n`);
 
+	const isSingleSection = doc.sections.length === 1;
 	for (const section of doc.sections) {
-		parts.push(`## ${section.title}\n`);
+		if (!(isSingleSection && section.title === doc.title)) {
+			parts.push(`## ${section.title}\n`);
+		}
 		parts.push(section.markdown);
 		parts.push("");
 	}

@@ -7,6 +7,7 @@ import { OutputWriter } from "@/export/OutputWriter";
 import { renderMarkdownBundle } from "@/formats/markdown-bundle";
 import { renderHtmlDocument } from "@/formats/html-document";
 import { renderPrintHtml } from "@/formats/print-html";
+import { renderSingleFileHtml } from "@/formats/single-file-html";
 
 export interface ExportResult {
 	success: boolean;
@@ -115,10 +116,13 @@ export class ExportRunner {
 				formatWarnings = await renderMarkdownBundle(doc, effectivePlan, writer);
 				break;
 			case "html-document":
-				formatWarnings = await renderHtmlDocument(doc, effectivePlan, writer);
+				formatWarnings = await renderHtmlDocument(doc, effectivePlan, writer, false, this.app);
 				break;
 			case "print-html":
-				formatWarnings = await renderPrintHtml(doc, effectivePlan, writer);
+				formatWarnings = await renderPrintHtml(doc, effectivePlan, writer, this.app);
+				break;
+			case "single-file-html":
+				formatWarnings = await renderSingleFileHtml(doc, effectivePlan, writer, this.app);
 				break;
 		}
 		allWarnings.push(...formatWarnings);
