@@ -23,23 +23,20 @@
 	margin-bottom: 0.75em;
 }
 
-.export-modal-folder-picker {
+.export-modal-input-group {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 0.75em;
+	flex-wrap: wrap;
+	flex: 1;
+	min-width: 0;
 	gap: 0.5em;
 }
 
-.export-modal-folder-picker label {
-	flex-shrink: 0;
-	width: 8em;
-	font-weight: 500;
+.export-modal-input-group input {
+	width: 100%;
 }
 
-.export-modal-folder-input {
-	flex: 1;
-	min-width: 0;
+.export-modal-input-group .export-modal-browse-btn {
+	margin-left: auto;
 }
 
 .export-modal-browse-btn {
