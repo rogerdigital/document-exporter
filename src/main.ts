@@ -75,12 +75,11 @@ export default class DocumentExporterPlugin extends Plugin {
 
 	private async executeExport(result: ExportModalResult) {
 		const progress = new ProgressNotice("Preparing export...");
-		progress.start(4);
 
 		try {
 			const resolver = new ExportSourceResolver(this.app);
 			const files = resolver.resolve(result.source, result.sort);
-			progress.increment();
+			progress.start(files.length);
 
 			const plan = new ExportPlanBuilder(
 				this.app,
@@ -98,11 +97,9 @@ export default class DocumentExporterPlugin extends Plugin {
 				progress.finish(`Export failed: ${error}`);
 				return;
 			}
-			progress.increment();
 
 			const runner = new ExportRunner(this.app);
 			const exportResult = await runner.run(plan, this.settings);
-			progress.increment();
 
 			if (exportResult.success) {
 				const msg = exportResult.warnings.length > 0

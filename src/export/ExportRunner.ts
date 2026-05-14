@@ -72,60 +72,92 @@ export class ExportRunner {
 		}
 
 		const effectivePlan = { ...plan, outputRoot };
-
-		// Step 1: Assemble document
-		if (this.cancelled) return this.cancelledResult(outputRoot);
-		const assembler = new DocumentAssembler(this.app, settings.includeSourcePathComments);
-		const doc = await assembler.assemble(files);
-
-		// Step 2: Collect attachments
-		if (this.cancelled) return this.cancelledResult(outputRoot);
 		const exportedPaths = new Set(plan.inputFiles);
-		let attachments = plan.attachmentCopies;
 
-		if (settings.copyAttachments) {
-			const collector = new AttachmentCollector(this.app, exportedPaths);
-			const collectResult = await collector.collect(files);
-			attachments = collectResult.attachments;
-			allWarnings.push(...collectResult.warnings);
+		// Build output path map: sourcePath -> outputPath
+		const outputPathMap = new Map<string, string>();
+		for (let i = 0; i < plan.inputFiles.length; i++) {
+			outputPathMap.set(plan.inputFiles[i], plan.outputFiles[i]);
 		}
 
-		doc.attachments = attachments;
+		const assembler = new DocumentAssembler(this.app, settings.includeSourcePathComments);
+		const copiedAttachments = new Set<string>();
 
-		// Step 3: Rewrite links in each section
-		if (this.cancelled) return this.cancelledResult(outputRoot);
-		const rewriter = new LinkRewriter(
-			this.app,
-			exportedPaths,
-			attachments,
-			effectivePlan.profile,
-		);
-
-		for (const section of doc.sections) {
+		// Export each file individually
+		for (let i = 0; i < files.length; i++) {
 			if (this.cancelled) return this.cancelledResult(outputRoot);
-			const result = rewriter.rewrite(section.markdown, section.sourcePath);
-			section.markdown = result.markdown;
-			allWarnings.push(...result.warnings);
-		}
 
-		// Step 4: Render format
-		if (this.cancelled) return this.cancelledResult(outputRoot);
-		let formatWarnings: string[] = [];
-		switch (effectivePlan.profile) {
-			case "markdown-bundle":
-				formatWarnings = await renderMarkdownBundle(doc, effectivePlan, writer);
-				break;
-			case "html-document":
-				formatWarnings = await renderHtmlDocument(doc, effectivePlan, writer, false, this.app);
-				break;
-			case "pdf":
-				formatWarnings = await renderPdf(doc, effectivePlan, writer, this.app);
-				break;
-			case "docx":
-				formatWarnings = await renderDocx(doc, effectivePlan, writer, this.app);
-				break;
+			const file = files[i];
+			const outputFilePath = plan.outputFiles[i];
+
+			// Step 1: Assemble single-file document
+			const doc = await assembler.assemble([file]);
+
+			// Step 2: Collect attachments for this file
+			let attachments = plan.attachmentCopies;
+			if (settings.copyAttachments) {
+				const collector = new AttachmentCollector(this.app, exportedPaths);
+				const collectResult = await collector.collect([file]);
+				attachments = collectResult.attachments;
+				allWarnings.push(...collectResult.warnings);
+			}
+			doc.attachments = attachments;
+
+			// Step 3: Rewrite links
+			const rewriter = new LinkRewriter(
+				this.app,
+				exportedPaths,
+				attachments,
+				effectivePlan.profile,
+				outputPathMap,
+				outputFilePath,
+				effectivePlan.outputRoot,
+			);
+			for (const section of doc.sections) {
+				const result = rewriter.rewrite(section.markdown, section.sourcePath);
+				section.markdown = result.markdown;
+				allWarnings.push(...result.warnings);
+			}
+
+			// Step 4: Ensure output folder exists
+			const outputDir = outputFilePath.substring(0, outputFilePath.lastIndexOf("/"));
+			await writer.ensureFolder(outputDir);
+
+			// Step 5: Render format
+			let formatWarnings: string[] = [];
+			switch (effectivePlan.profile) {
+				case "markdown-bundle":
+					formatWarnings = await renderMarkdownBundle(doc, effectivePlan, writer, outputFilePath);
+					break;
+				case "html-document":
+					formatWarnings = await renderHtmlDocument(doc, effectivePlan, writer, false, this.app, outputFilePath);
+					break;
+				case "pdf":
+					formatWarnings = await renderPdf(doc, effectivePlan, writer, this.app, outputFilePath);
+					break;
+				case "docx":
+					formatWarnings = await renderDocx(doc, effectivePlan, writer, this.app, outputFilePath);
+					break;
+			}
+			allWarnings.push(...formatWarnings);
+
+			// Copy attachments (deduplicate across files)
+			if (doc.attachments.length > 0) {
+				await writer.ensureFolder(`${effectivePlan.outputRoot}/assets`);
+			}
+			for (const att of doc.attachments) {
+				if (copiedAttachments.has(att.outputRelativePath)) continue;
+				copiedAttachments.add(att.outputRelativePath);
+				try {
+					await writer.copyBinaryFile(
+						att.sourcePath,
+						`${effectivePlan.outputRoot}/${att.outputRelativePath}`,
+					);
+				} catch {
+					allWarnings.push(`Failed to copy attachment: ${att.sourcePath}`);
+				}
+			}
 		}
-		allWarnings.push(...formatWarnings);
 
 		// Write export report
 		if (allWarnings.length > 0) {

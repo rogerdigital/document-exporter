@@ -12,6 +12,7 @@ export async function renderDocx(
 	plan: ExportPlan,
 	writer: OutputWriter,
 	app: App | null = null,
+	outputFilePath?: string,
 ): Promise<string[]> {
 	const warnings: string[] = [];
 
@@ -61,8 +62,9 @@ export async function renderDocx(
 	});
 
 	const buffer = await Packer.toBuffer(document);
-	const filename = plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "");
-	await writer.writeBinary(`${plan.outputRoot}/${filename}.docx`, buffer);
+	const resolved = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "")}.docx`;
+	await writer.ensureFolder(resolved.substring(0, resolved.lastIndexOf("/")));
+	await writer.writeBinary(resolved, buffer);
 
 	return warnings;
 }

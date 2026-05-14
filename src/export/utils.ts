@@ -45,3 +45,47 @@ export function restoreCodeBlocks(text: string, blocks: string[]): string {
 function escapeRegex(s: string): string {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+import { ExportProfileId } from "@/types";
+
+export function extensionForProfile(profile: ExportProfileId): string {
+	switch (profile) {
+		case "markdown-bundle": return "md";
+		case "html-document": return "html";
+		case "pdf": return "pdf";
+		case "docx": return "docx";
+	}
+}
+
+export function longestCommonDirPrefix(paths: string[]): string {
+	if (paths.length === 0) return "";
+	const split = paths.map(p => p.split("/"));
+	const minLen = Math.min(...split.map(s => s.length));
+	let commonLen = 0;
+	for (let i = 0; i < minLen; i++) {
+		const seg = split[0][i];
+		if (split.every(s => s[i] === seg)) commonLen = i + 1;
+		else break;
+	}
+	// Must end at directory boundary (exclude the filename segment)
+	return split[0].slice(0, commonLen - 1).join("/") + "/";
+}
+
+export function relativePathBetween(from: string, to: string): string {
+	const fromParts = from.split("/");
+	const toParts = to.split("/");
+
+	// Find common prefix length (directory segments only, exclude filename)
+	let commonLen = 0;
+	while (commonLen < fromParts.length - 1 &&
+		commonLen < toParts.length - 1 &&
+		fromParts[commonLen] === toParts[commonLen]) {
+		commonLen++;
+	}
+
+	const upCount = fromParts.length - commonLen - 1;
+	const ups = upCount > 0 ? Array(upCount).fill("..").join("/") : "";
+	const downParts = toParts.slice(commonLen).join("/");
+
+	return ups ? `${ups}/${downParts}` : downParts;
+}
