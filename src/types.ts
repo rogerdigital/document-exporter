@@ -51,7 +51,7 @@ export type AssembledDocument = {
 };
 
 export const DEFAULT_SETTINGS: ExportSettings = {
-	defaultProfile: "markdown-bundle",
+	defaultProfile: "pdf",
 	defaultOutputFolder: "exports",
 	includeSourcePathComments: false,
 	copyAttachments: true,

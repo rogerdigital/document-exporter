@@ -8,7 +8,7 @@ export async function loadSettings(
 ): Promise<ExportSettings> {
 	const data = Object.assign({}, DEFAULT_SETTINGS, await plugin.loadData() as Partial<ExportSettings>);
 	if (!VALID_PROFILES.has(data.defaultProfile)) {
-		data.defaultProfile = "html-document";
+		data.defaultProfile = DEFAULT_SETTINGS.defaultProfile;
 	}
 	return data;
 }

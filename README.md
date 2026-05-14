@@ -1,12 +1,13 @@
 # Document Exporter
 
-Export notes, folders, and filtered results into Markdown bundles, HTML documents, and print-ready exports.
+Export notes, folders, and filtered results into PDF, Word, Markdown bundles, and HTML documents.
 
 ## Features
 
+- **PDF** — generates a printable `.pdf` directly from selected notes
+- **Word document** — generates a `.docx` document for editing and sharing
 - **Markdown bundle** — combines selected notes into a single `.md` file with copied attachments and rewritten links
 - **HTML document** — generates a standalone `.html` with table of contents and linked assets
-- **Print-ready HTML** — produces HTML optimized for browser print / Save as PDF
 
 ## Usage
 
@@ -25,7 +26,7 @@ Multiple ways to start an export:
 ![Export dialog](docs/screenshots/document-exporter-main-panel.png)
 
 1. Choose **source** — current file, folder, selected files, or tag filter
-2. Choose **format** — Markdown bundle, HTML document, or Print-ready HTML
+2. Choose **format** — PDF, Word document, Markdown bundle, or HTML document
 3. Set **output folder** — type a path, click **Vault** to pick from vault folders, or **Choose folder** to select a system folder (desktop only)
 4. Set **file name** — defaults to the source file or folder name
 5. Click **Next** → review the summary → click **Export**
@@ -51,8 +52,8 @@ A notification shows the output path when export completes.
 ### Export notes as PDF
 
 1. Start an export from sidebar icon or command palette
-2. Format: **Print-ready HTML** → click **Export**
-3. Open the exported `.html` in your browser → `Cmd/Ctrl+P` → Save as PDF
+2. Format: **PDF** → click **Export**
+3. Result: `<filename>.pdf`
 
 ## Settings
 
@@ -61,7 +62,7 @@ Open **Settings → Document Exporter**.
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Output folder | Where exported files are saved | `exports` |
-| Default export format | Format pre-selected when opening the dialog | Markdown bundle |
+| Default export format | Format pre-selected when opening the dialog | PDF |
 | Default sort mode | How notes are ordered in the output | File path |
 | Include source path comments | Add HTML comments showing each section's origin | Off |
 | Copy attachments | Copy referenced images and files into the export | On |
@@ -69,7 +70,6 @@ Open **Settings → Document Exporter**.
 
 ## Limitations
 
-- Direct PDF generation is not supported — use Print-ready HTML and browser print instead
 - Inline note embeds (`![[Note]]`) are preserved as links, not expanded
 - Dataview queries are not executed during export
 - Canvas files are not supported
