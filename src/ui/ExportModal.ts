@@ -2,10 +2,10 @@ import { App, Modal, Platform, TFile, TFolder, FuzzySuggestModal } from "obsidia
 import { ExportProfileId, ExportSettings, ExportSource, ExportSort } from "@/types";
 
 const PROFILE_OPTIONS: Record<ExportProfileId, string> = {
-	"markdown-bundle": "Markdown bundle",
-	"html-document": "HTML document",
 	pdf: "PDF",
 	docx: "Word document",
+	"markdown-bundle": "Markdown bundle",
+	"html-document": "HTML document",
 };
 
 const SOURCE_OPTIONS = {
