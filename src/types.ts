@@ -1,18 +1,11 @@
 export type ExportProfileId = "markdown-bundle" | "html-document" | "pdf" | "docx";
 
-export type ExportSort = {
-	mode: "path" | "name" | "frontmatter";
-	frontmatterKey?: string;
-	direction: "asc" | "desc";
-};
-
 export type ExportSettings = {
 	defaultProfile: ExportProfileId;
 	defaultOutputFolder: string;
 	includeSourcePathComments: boolean;
 	copyAttachments: boolean;
 	overwriteExisting: boolean;
-	defaultSort: ExportSort;
 };
 
 export type ExportSource =
@@ -33,7 +26,6 @@ export type ExportPlan = {
 	outputFilename: string;
 	outputFiles: string[];
 	attachmentCopies: AttachmentCopy[];
-	sort: ExportSort;
 };
 
 export type DocumentSection = {
@@ -55,8 +47,4 @@ export const DEFAULT_SETTINGS: ExportSettings = {
 	includeSourcePathComments: false,
 	copyAttachments: true,
 	overwriteExisting: false,
-	defaultSort: {
-		mode: "path",
-		direction: "asc",
-	},
 };

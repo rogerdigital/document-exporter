@@ -1,5 +1,5 @@
 import { App, Modal, Platform, TFile, TFolder, FuzzySuggestModal } from "obsidian";
-import { ExportProfileId, ExportSettings, ExportSource, ExportSort } from "@/types";
+import { ExportProfileId, ExportSettings, ExportSource } from "@/types";
 
 const PROFILE_OPTIONS: Record<ExportProfileId, string> = {
 	pdf: "PDF",
@@ -19,7 +19,6 @@ export type ExportModalResult = {
 	profile: ExportProfileId;
 	outputFolder: string;
 	outputFilename: string;
-	sort: ExportSort;
 };
 
 export class ExportModal extends Modal {
@@ -31,7 +30,6 @@ export class ExportModal extends Modal {
 	private profile: ExportProfileId;
 	private outputFolder: string;
 	private outputFilename: string;
-	private sort: ExportSort;
 	private preselectedFile?: TFile;
 	private preselectedFolder?: TFolder;
 
@@ -41,7 +39,6 @@ export class ExportModal extends Modal {
 		this.profile = settings.defaultProfile;
 		this.outputFolder = settings.defaultOutputFolder;
 		this.outputFilename = this.deriveDefaultFilename();
-		this.sort = { ...settings.defaultSort };
 		this.preselectedFile = preselectedFile;
 		this.preselectedFolder = preselectedFolder;
 	}
@@ -157,39 +154,6 @@ export class ExportModal extends Modal {
 			filenameInput.value = this.outputFilename;
 		};
 
-		// Sort mode
-		const sortRow = contentEl.createDiv({ cls: "export-modal-row" });
-		sortRow.createEl("label", { text: "Sort by" });
-		const sortSelect = sortRow.createEl("select");
-		const sortOptions: Record<string, string> = { path: "File path", name: "File name", frontmatter: "Frontmatter field" };
-		for (const [value, label] of Object.entries(sortOptions)) {
-			const opt = sortSelect.createEl("option", { text: label });
-			opt.value = value;
-		}
-		sortSelect.value = this.sort.mode;
-		sortSelect.addEventListener("change", () => {
-			this.sort.mode = sortSelect.value as ExportSort["mode"];
-			renderSortFields();
-		});
-
-		const sortFields = contentEl.createDiv({ cls: "export-modal-source-fields" });
-		const renderSortFields = () => {
-			sortFields.empty();
-			if (this.sort.mode === "frontmatter") {
-				const row = sortFields.createDiv({ cls: "export-modal-row" });
-				row.createEl("label", { text: "Frontmatter key" });
-				const input = row.createEl("input", {
-					type: "text",
-					attr: { placeholder: "Title" },
-				});
-				input.value = this.sort.frontmatterKey ?? "";
-				input.addEventListener("input", (e) => {
-					this.sort.frontmatterKey = (e.target as HTMLInputElement).value || undefined;
-				});
-			}
-		};
-		renderSortFields();
-
 		// Buttons
 		const buttonRow = contentEl.createDiv({ cls: "export-modal-buttons" });
 		const cancelButton = buttonRow.createEl("button", { text: "Cancel" });
@@ -299,7 +263,6 @@ export class ExportModal extends Modal {
 		}
 
 		summary.createEl("p", { text: `Source: ${SOURCE_OPTIONS[result.source.type]}` });
-		summary.createEl("p", { text: `Sort: ${result.sort.mode} (${result.sort.direction})` });
 
 		if (result.source.type === "folder") {
 			summary.createEl("p", { text: `Folder: ${result.source.path} (recursive: ${result.source.recursive})` });
@@ -353,7 +316,6 @@ export class ExportModal extends Modal {
 			profile: this.profile,
 			outputFolder: this.outputFolder,
 			outputFilename: this.outputFilename || "export",
-			sort: this.sort,
 		};
 	}
 }
