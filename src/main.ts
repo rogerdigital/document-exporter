@@ -5,7 +5,7 @@ import { DocumentExporterSettingTab } from "@/settings/settings-tab";
 import { ExportModal, ExportModalResult } from "@/ui/ExportModal";
 import { ExportSourceResolver } from "@/export/ExportSourceResolver";
 import { ExportPlanBuilder, validatePlan } from "@/export/ExportPlan";
-import { ExportRunner } from "@/export/ExportRunner";
+import { ExportRunner, ExportProgressCallbacks, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
 import { ProgressNotice } from "@/ui/ProgressNotice";
 
 export default class DocumentExporterPlugin extends Plugin {
@@ -74,12 +74,12 @@ export default class DocumentExporterPlugin extends Plugin {
 	}
 
 	private async executeExport(result: ExportModalResult) {
-		const progress = new ProgressNotice("Preparing export...");
+		const title = this.buildProgressTitle(result);
+		const progress = new ProgressNotice(title);
 
 		try {
 			const resolver = new ExportSourceResolver(this.app);
 			const files = resolver.resolve(result.source);
-			progress.start(files.length);
 
 			const plan = new ExportPlanBuilder(
 				this.app,
@@ -99,7 +99,39 @@ export default class DocumentExporterPlugin extends Plugin {
 			}
 
 			const runner = new ExportRunner(this.app);
-			const exportResult = await runner.run(plan, this.settings);
+			const isSingleFile = files.length === 1;
+			let singleFileStep = 0;
+
+			const callbacks: ExportProgressCallbacks = {
+				onFileStart: () => {
+					if (isSingleFile) {
+						singleFileStep = 0;
+					}
+				},
+				onFileComplete: (i, total) => {
+					if (isSingleFile) return;
+					progress.setProgress(i + 1, total);
+				},
+				onPhase: (phase) => {
+					progress.setPhase(phase);
+					if (isSingleFile) {
+						singleFileStep++;
+						progress.setProgress(singleFileStep, SINGLE_FILE_PHASES.length);
+					}
+				},
+			};
+
+			progress.onCancel = () => {
+				runner.cancel();
+			};
+
+			if (isSingleFile) {
+				progress.start(SINGLE_FILE_PHASES.length);
+			} else {
+				progress.start(files.length);
+			}
+
+			const exportResult = await runner.run(plan, this.settings, callbacks);
 
 			if (exportResult.success) {
 				const msg = exportResult.warnings.length > 0
@@ -112,6 +144,21 @@ export default class DocumentExporterPlugin extends Plugin {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			progress.finish(`Export error: ${message}`);
+		}
+	}
+
+	private buildProgressTitle(result: ExportModalResult): string {
+		switch (result.source.type) {
+			case "current-file": {
+				const name = result.source.path.split("/").pop()?.replace(/\.md$/, "") ?? "file";
+				return `Exporting: ${name}`;
+			}
+			case "folder": {
+				const name = result.source.path.split("/").pop() ?? "folder";
+				return `Exporting folder: ${name}`;
+			}
+			case "files":
+				return `Exporting ${result.source.paths.length} files`;
 		}
 	}
 }
