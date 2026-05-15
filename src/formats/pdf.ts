@@ -1,4 +1,4 @@
-import { App, Platform } from "obsidian";
+import { App, Platform, TFile } from "obsidian";
 import { AssembledDocument, DocumentSection, ExportPlan } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
 import { renderMarkdownNative, rewriteAppProtocolUrls } from "@/formats/native-renderer";
@@ -29,8 +29,8 @@ export async function renderPdf(
 		for (const att of doc.attachments) {
 			try {
 				const file = app.vault.getAbstractFileByPath(att.sourcePath);
-				if (file && "extension" in file) {
-					const buffer = await app.vault.readBinary(file as import("obsidian").TFile);
+				if (file instanceof TFile) {
+					const buffer = await app.vault.readBinary(file);
 					const base64 = arrayBufferToBase64(buffer);
 					const ext = att.sourcePath.split(".").pop()?.toLowerCase() ?? "";
 					const mime = mimeFromExt(ext);
@@ -114,29 +114,47 @@ ${PDF_PAGE_RESET_CSS}</style></head>
 <body><main class="pdf-export-page markdown-rendered">${htmlBody}</main></body></html>`;
 }
 
-async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Buffer> {
+interface ElectronWebContents {
+	printToPDF(options: Record<string, unknown>): Promise<ArrayBuffer>;
+	executeJavaScript<T>(code: string): Promise<T>;
+}
+
+interface ElectronBrowserWindow {
+	webContents: ElectronWebContents;
+	loadURL(url: string): Promise<void>;
+	showInactive(): void;
+	close(): void;
+}
+
+type ElectronBrowserWindowCtor = new (options: Record<string, unknown>) => ElectronBrowserWindow;
+
+function getBrowserWindowCtor(): ElectronBrowserWindowCtor {
+	// @ts-expect-error — Electron remote not in browser type definitions
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Electron remote only available at runtime in Obsidian desktop
+	const electron = window.electron ?? window.require?.("electron");
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Electron remote module not in type definitions
+	if (!electron?.remote?.BrowserWindow) {
+		throw new Error("electron.remote.BrowserWindow not available");
+	}
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return -- Electron BrowserWindow constructor from runtime remote module
+	return electron.remote.BrowserWindow;
+}
+
+async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uint8Array> {
 	const fullHtml = buildPdfHtml(htmlBody, css);
-	const fs = require("fs") as typeof import("fs");
-	const path = require("path") as typeof import("path");
-	const os = require("os") as typeof import("os");
+
+	// eslint-disable-next-line import/no-nodejs-modules -- PDF export requires filesystem access in Electron
+	const fs = await import("fs");
+	// eslint-disable-next-line import/no-nodejs-modules -- tmpdir for intermediate HTML file
+	const path = await import("path");
+	// eslint-disable-next-line import/no-nodejs-modules -- tmpdir for intermediate HTML file
+	const os = await import("os");
 
 	const tmpFile = path.join(os.tmpdir(), `obsidian-pdf-export-${Date.now()}.html`);
 	fs.writeFileSync(tmpFile, fullHtml, "utf-8");
 
-	// Access Electron remote module
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const electron = (window as any).electron || require("electron");
-	const remote = electron.remote;
-	if (!remote) {
-		throw new Error("electron.remote not available — cannot create BrowserWindow");
-	}
-
-	const BrowserWindow = remote.BrowserWindow;
-	if (!BrowserWindow) {
-		throw new Error("BrowserWindow not found on electron.remote");
-	}
-
-	const win = new BrowserWindow({
+	const BrowserWindowCtor = getBrowserWindowCtor();
+	const win = new BrowserWindowCtor({
 		show: true,
 		frame: false,
 		skipTaskbar: true,
@@ -171,7 +189,7 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Buf
 			},
 		});
 
-		return Buffer.from(pdfData);
+		return new Uint8Array(pdfData);
 	} finally {
 		win.close();
 		try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
