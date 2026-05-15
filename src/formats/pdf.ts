@@ -143,11 +143,8 @@ function getBrowserWindowCtor(): ElectronBrowserWindowCtor {
 async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uint8Array> {
 	const fullHtml = buildPdfHtml(htmlBody, css);
 
-	// eslint-disable-next-line import/no-nodejs-modules -- PDF export requires filesystem access in Electron
 	const fs = await import("fs");
-	// eslint-disable-next-line import/no-nodejs-modules -- tmpdir for intermediate HTML file
 	const path = await import("path");
-	// eslint-disable-next-line import/no-nodejs-modules -- tmpdir for intermediate HTML file
 	const os = await import("os");
 
 	const tmpFile = path.join(os.tmpdir(), `obsidian-pdf-export-${Date.now()}.html`);
