@@ -16,8 +16,14 @@ export async function renderMarkdownNative(
 	timeout = POST_PROCESSOR_TIMEOUT,
 ): Promise<NativeRenderResult> {
 	const warnings: string[] = [];
-	const container = document.body.createDiv();
-	container.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:800px;visibility:hidden;";
+	const container = activeDocument.body.createDiv();
+	container.setCssProps({
+		position: "fixed",
+		left: "-9999px",
+		top: "-9999px",
+		width: "800px",
+		visibility: "hidden",
+	});
 
 	const component = new Component();
 	component.load();
@@ -38,8 +44,8 @@ export async function renderMarkdownNative(
 
 export function extractObsidianStyles(): string {
 	const sheets: string[] = [];
-	for (let i = 0; i < document.styleSheets.length; i++) {
-		const sheet = document.styleSheets[i];
+	for (let i = 0; i < activeDocument.styleSheets.length; i++) {
+		const sheet = activeDocument.styleSheets[i];
 		try {
 			for (let j = 0; j < sheet.cssRules.length; j++) {
 				const rule = sheet.cssRules[j];
@@ -123,14 +129,14 @@ async function waitForPostProcessors(
 	timeout: number,
 ): Promise<boolean> {
 	return new Promise((resolve) => {
-		let timer: ReturnType<typeof setTimeout>;
-		let overallTimer: ReturnType<typeof setTimeout>;
+		let timer: number;
+		let overallTimer: number;
 
 		const observer = new MutationObserver(() => {
-			clearTimeout(timer);
-			timer = setTimeout(() => {
+			window.clearTimeout(timer);
+			timer = window.setTimeout(() => {
 				observer.disconnect();
-				clearTimeout(overallTimer);
+				window.clearTimeout(overallTimer);
 				resolve(true);
 			}, DEBOUNCE_INTERVAL);
 		});
@@ -138,16 +144,16 @@ async function waitForPostProcessors(
 		observer.observe(el, { childList: true, subtree: true, attributes: true });
 
 		// Initial debounce in case no mutations fire (rendering already complete)
-		timer = setTimeout(() => {
+		timer = window.setTimeout(() => {
 			observer.disconnect();
-			clearTimeout(overallTimer);
+			window.clearTimeout(overallTimer);
 			resolve(true);
 		}, DEBOUNCE_INTERVAL);
 
 		// Overall timeout safety net
-		overallTimer = setTimeout(() => {
+		overallTimer = window.setTimeout(() => {
 			observer.disconnect();
-			clearTimeout(timer);
+			window.clearTimeout(timer);
 			resolve(false);
 		}, timeout);
 	});

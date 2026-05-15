@@ -86,7 +86,6 @@ export class ProgressNotice {
 		});
 		cancelBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			if (!window.confirm("Cancel export? Already exported files will be kept.")) return;
 			this.onCancel?.();
 			cancelBtn.disabled = true;
 			cancelBtn.textContent = "Cancelling...";

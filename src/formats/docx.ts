@@ -2,9 +2,9 @@ import { App, TFile } from "obsidian";
 import {
 	Document, Packer, Paragraph, TextRun, HeadingLevel,
 	ImageRun, ExternalHyperlink, Table, TableRow, TableCell,
-	WidthType, BorderStyle, AlignmentType,
+	WidthType, BorderStyle,
 } from "docx";
-import { AssembledDocument, DocumentSection, ExportPlan } from "@/types";
+import { AssembledDocument, ExportPlan } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
 
 export async function renderDocx(
@@ -18,14 +18,14 @@ export async function renderDocx(
 
 	await writer.ensureFolder(plan.outputRoot);
 
-	const imageCache = new Map<string, Buffer>();
+	const imageCache = new Map<string, Uint8Array>();
 	if (app && doc.attachments.length > 0) {
 		for (const att of doc.attachments) {
 			try {
 				const file = app.vault.getAbstractFileByPath(att.sourcePath);
-				if (file && "extension" in file) {
-					const buffer = await app.vault.readBinary(file as TFile);
-					imageCache.set(att.outputRelativePath, Buffer.from(buffer));
+				if (file instanceof TFile) {
+					const buffer = await app.vault.readBinary(file);
+					imageCache.set(att.outputRelativePath, new Uint8Array(buffer));
 				}
 			} catch {
 				warnings.push(`Failed to read attachment: ${att.sourcePath}`);
@@ -61,7 +61,7 @@ export async function renderDocx(
 		}],
 	});
 
-	const buffer = await Packer.toBuffer(document);
+	const buffer = new Uint8Array(await Packer.toBuffer(document));
 	const resolved = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "")}.docx`;
 	await writer.ensureFolder(resolved.substring(0, resolved.lastIndexOf("/")));
 	await writer.writeBinary(resolved, buffer);
@@ -71,7 +71,7 @@ export async function renderDocx(
 
 function parseMarkdownToDocx(
 	markdown: string,
-	imageCache: Map<string, Buffer>,
+	imageCache: Map<string, Uint8Array>,
 	warnings: string[],
 ): Paragraph[] {
 	const paragraphs: Paragraph[] = [];

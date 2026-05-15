@@ -56,7 +56,6 @@ function lastNotice() {
 describe("ProgressNotice", () => {
 	beforeEach(() => {
 		noticeInstances.length = 0;
-		window.confirm = vi.fn(() => true);
 	});
 
 	it("shows notice on start with title", () => {
@@ -106,18 +105,6 @@ describe("ProgressNotice", () => {
 		btn.click();
 		expect(btn.disabled).toBe(true);
 		expect(btn.textContent).toBe("Cancelling...");
-	});
-
-	it("does not cancel when confirm is rejected", () => {
-		const p = new ProgressNotice("Test");
-		p.start(5);
-		(window.confirm as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
-		const spy = vi.fn();
-		p.onCancel = spy;
-		const btn = lastNotice().noticeEl.querySelector(".de-progress-cancel") as HTMLButtonElement;
-		btn.click();
-		expect(spy).not.toHaveBeenCalled();
-		expect(btn.disabled).toBe(false);
 	});
 
 	it("hides notice on finish", () => {
