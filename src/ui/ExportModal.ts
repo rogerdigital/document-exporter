@@ -88,15 +88,15 @@ export class ExportModal extends Modal {
 		const renderSourceFields = () => {
 			sourceFields.empty();
 			if (this.sourceType === "folder") {
+				sourceFields.removeClass("export-modal-source-fields");
 				this.renderFolderPicker(sourceFields, "Folder path", this.folderPath, (v) => {
 					this.folderPath = v;
 					renderNameField();
 				});
 			} else if (this.sourceType === "files") {
-				const row = sourceFields.createDiv({ cls: "export-modal-row" });
-				row.createEl("label", { text: "Selected files" });
+				sourceFields.addClass("export-modal-source-fields");
 				const count = this.selectedFilePaths.length;
-				const btn = row.createEl("button", {
+				const btn = sourceFields.createEl("button", {
 					text: count > 0 ? `${count} file(s) selected` : "Choose files",
 				});
 				btn.addEventListener("click", () => {
@@ -106,6 +106,8 @@ export class ExportModal extends Modal {
 					});
 					picker.open();
 				});
+			} else {
+				sourceFields.removeClass("export-modal-source-fields");
 			}
 		};
 
@@ -403,6 +405,7 @@ class FilePickerModal extends Modal {
 		const filtered = this.filterText
 			? allFiles.filter((f) => f.path.toLowerCase().includes(this.filterText))
 			: allFiles;
+		filtered.sort((a, b) => a.path.localeCompare(b.path));
 
 		for (const file of filtered) {
 			const row = this.listEl.createDiv({ cls: "file-picker-item" });
@@ -432,7 +435,7 @@ class FolderPickerModal extends FuzzySuggestModal<TFolder> {
 	}
 
 	getItems(): TFolder[] {
-		return getAllFolders(this.app.vault.getRoot());
+		return getAllFolders(this.app.vault.getRoot()).sort((a, b) => a.path.localeCompare(b.path));
 	}
 
 	getItemText(item: TFolder): string {
