@@ -143,9 +143,11 @@ function getBrowserWindowCtor(): ElectronBrowserWindowCtor {
 async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uint8Array> {
 	const fullHtml = buildPdfHtml(htmlBody, css);
 
-	const fs = await import("fs");
-	const path = await import("path");
-	const os = await import("os");
+	/* eslint-disable @typescript-eslint/no-require-imports */
+	const fs = require("fs") as typeof import("fs");
+	const path = require("path") as typeof import("path");
+	const os = require("os") as typeof import("os");
+	/* eslint-enable @typescript-eslint/no-require-imports */
 
 	const tmpFile = path.join(os.tmpdir(), `obsidian-pdf-export-${Date.now()}.html`);
 	fs.writeFileSync(tmpFile, fullHtml, "utf-8");
