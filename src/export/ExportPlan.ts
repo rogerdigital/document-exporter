@@ -8,6 +8,7 @@ export class ExportPlanBuilder {
 	private profile: ExportProfileId;
 	private outputRoot: string;
 	private outputFilename: string;
+	private outputFolderName?: string;
 	private inputFiles: string[] = [];
 
 	constructor(
@@ -16,12 +17,14 @@ export class ExportPlanBuilder {
 		profile: ExportProfileId,
 		outputRoot: string,
 		outputFilename: string,
+		outputFolderName?: string,
 	) {
 		this.app = app;
 		this.source = source;
 		this.profile = profile;
 		this.outputRoot = outputRoot;
 		this.outputFilename = outputFilename;
+		this.outputFolderName = outputFolderName;
 	}
 
 	setInputFiles(paths: string[]): this {
@@ -36,6 +39,7 @@ export class ExportPlanBuilder {
 			inputFiles: this.inputFiles,
 			outputRoot: this.outputRoot,
 			outputFilename: this.outputFilename,
+			outputFolderName: this.outputFolderName,
 			outputFiles: this.computeOutputFiles(),
 			attachmentCopies: [],
 		};
@@ -49,11 +53,15 @@ export class ExportPlanBuilder {
 			return [`${this.outputRoot}/${baseName}.${ext}`];
 		}
 
+		const root = this.outputFolderName
+			? `${this.outputRoot}/${this.outputFolderName}`
+			: this.outputRoot;
+
 		if (this.source.type === "folder") {
 			const prefix = this.source.path ? this.source.path + "/" : "";
 			return this.inputFiles.map(p => {
 				const rel = prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
-				return `${this.outputRoot}/${rel.replace(/\.md$/i, `.${ext}`)}`;
+				return `${root}/${rel.replace(/\.md$/i, `.${ext}`)}`;
 			});
 		}
 
@@ -61,7 +69,7 @@ export class ExportPlanBuilder {
 		const prefix = longestCommonDirPrefix(this.inputFiles);
 		return this.inputFiles.map(p => {
 			const rel = prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
-			return `${this.outputRoot}/${rel.replace(/\.md$/i, `.${ext}`)}`;
+			return `${root}/${rel.replace(/\.md$/i, `.${ext}`)}`;
 		});
 	}
 

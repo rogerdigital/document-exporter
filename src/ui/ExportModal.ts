@@ -19,6 +19,7 @@ export type ExportModalResult = {
 	profile: ExportProfileId;
 	outputFolder: string;
 	outputFilename: string;
+	outputFolderName?: string;
 };
 
 export class ExportModal extends Modal {
@@ -30,6 +31,7 @@ export class ExportModal extends Modal {
 	private profile: ExportProfileId;
 	private outputFolder: string;
 	private outputFilename: string;
+	private outputFolderName = "";
 	private preselectedFile?: TFile;
 	private preselectedFolder?: TFolder;
 
@@ -88,7 +90,7 @@ export class ExportModal extends Modal {
 			if (this.sourceType === "folder") {
 				this.renderFolderPicker(sourceFields, "Folder path", this.folderPath, (v) => {
 					this.folderPath = v;
-					updateDefaultFilename();
+					renderNameField();
 				});
 			} else if (this.sourceType === "files") {
 				const row = sourceFields.createDiv({ cls: "export-modal-row" });
@@ -110,6 +112,7 @@ export class ExportModal extends Modal {
 		sourceSelect.addEventListener("change", () => {
 			this.sourceType = sourceSelect.value;
 			renderSourceFields();
+			renderNameField();
 			updateDefaultFilename();
 		});
 		renderSourceFields();
@@ -130,28 +133,48 @@ export class ExportModal extends Modal {
 		// Output folder with browser — supports both vault and system paths
 		this.renderOutputFolderPicker(contentEl);
 
-		// Output filename
-		const filenameRow = contentEl.createDiv({ cls: "export-modal-row" });
-		filenameRow.createEl("label", { text: "File name" });
-		const filenameInput = filenameRow.createEl("input", {
-			type: "text",
-			attr: { placeholder: "Document" },
-		});
-		filenameInput.value = this.outputFilename;
-		filenameInput.addEventListener("input", (e) => {
-			this.outputFilename = (e.target as HTMLInputElement).value;
-		});
+		// Output name field (File name for single, Folder name for batch)
+		const nameFieldContainer = contentEl.createDiv();
+		let filenameInput: HTMLInputElement | null = null;
+
+		const renderNameField = () => {
+			nameFieldContainer.empty();
+			const isBatch = this.sourceType !== "current-file";
+			const row = nameFieldContainer.createDiv({ cls: "export-modal-row" });
+
+			if (isBatch) {
+				this.updateDefaultFolderName();
+				row.createEl("label", { text: "Folder name" });
+				const input = row.createEl("input", {
+					type: "text",
+					attr: { placeholder: this.sourceType === "folder" ? "folder name" : "files" },
+				});
+				input.value = this.outputFolderName;
+				input.addEventListener("input", (e) => {
+					this.outputFolderName = (e.target as HTMLInputElement).value;
+				});
+				filenameInput = null;
+			} else {
+				row.createEl("label", { text: "File name" });
+				const input = row.createEl("input", {
+					type: "text",
+					attr: { placeholder: "Document" },
+				});
+				input.value = this.outputFilename;
+				input.addEventListener("input", (e) => {
+					this.outputFilename = (e.target as HTMLInputElement).value;
+				});
+				filenameInput = input;
+			}
+		};
+		renderNameField();
 
 		const updateDefaultFilename = () => {
 			if (this.sourceType === "current-file") {
 				const file = this.preselectedFile ?? this.app.workspace.getActiveFile();
 				this.outputFilename = file?.basename ?? "export";
-			} else if (this.sourceType === "folder" && this.folderPath) {
-				this.outputFilename = this.folderPath.split("/").pop() ?? "export";
-			} else {
-				this.outputFilename = "export";
+				if (filenameInput) filenameInput.value = this.outputFilename;
 			}
-			filenameInput.value = this.outputFilename;
 		};
 
 		// Buttons
@@ -259,7 +282,8 @@ export class ExportModal extends Modal {
 		if (isSingleFile) {
 			summary.createEl("p", { text: `Output: ${result.outputFolder}/${result.outputFilename}` });
 		} else {
-			summary.createEl("p", { text: `Output: ${result.outputFolder}/ (preserving directory structure)` });
+			const folderName = result.outputFolderName ?? "export";
+			summary.createEl("p", { text: `Output: ${result.outputFolder}/${folderName}/ (preserving directory structure)` });
 		}
 
 		summary.createEl("p", { text: `Source: ${SOURCE_OPTIONS[result.source.type]}` });
@@ -296,6 +320,14 @@ export class ExportModal extends Modal {
 		return "export";
 	}
 
+	private updateDefaultFolderName(): void {
+		if (this.sourceType === "folder" && this.folderPath) {
+			this.outputFolderName = this.folderPath.split("/").pop() ?? "files";
+		} else {
+			this.outputFolderName = "files";
+		}
+	}
+
 	private buildSource(): ExportSource {
 		switch (this.sourceType) {
 			case "current-file": {
@@ -311,11 +343,13 @@ export class ExportModal extends Modal {
 	}
 
 	private buildResult(): ExportModalResult {
+		const isBatch = this.sourceType !== "current-file";
 		return {
 			source: this.buildSource(),
 			profile: this.profile,
 			outputFolder: this.outputFolder,
 			outputFilename: this.outputFilename || "export",
+			outputFolderName: isBatch ? (this.outputFolderName || "files") : undefined,
 		};
 	}
 }

@@ -24,6 +24,7 @@ export type ExportPlan = {
 	inputFiles: string[];
 	outputRoot: string;
 	outputFilename: string;
+	outputFolderName?: string;
 	outputFiles: string[];
 	attachmentCopies: AttachmentCopy[];
 };
