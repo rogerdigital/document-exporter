@@ -74,6 +74,10 @@ export class ExportRunner {
 		const effectivePlan = { ...plan, outputRoot };
 		const exportedPaths = new Set(plan.inputFiles);
 
+		const assetsRoot = effectivePlan.outputFolderName
+			? `${outputRoot}/${effectivePlan.outputFolderName}`
+			: outputRoot;
+
 		// Build output path map: sourcePath -> outputPath
 		const outputPathMap = new Map<string, string>();
 		for (let i = 0; i < plan.inputFiles.length; i++) {
@@ -111,7 +115,7 @@ export class ExportRunner {
 				effectivePlan.profile,
 				outputPathMap,
 				outputFilePath,
-				effectivePlan.outputRoot,
+				assetsRoot,
 			);
 			for (const section of doc.sections) {
 				const result = rewriter.rewrite(section.markdown, section.sourcePath);
@@ -143,7 +147,7 @@ export class ExportRunner {
 
 			// Copy attachments (deduplicate across files)
 			if (doc.attachments.length > 0) {
-				await writer.ensureFolder(`${effectivePlan.outputRoot}/assets`);
+				await writer.ensureFolder(`${assetsRoot}/assets`);
 			}
 			for (const att of doc.attachments) {
 				if (copiedAttachments.has(att.outputRelativePath)) continue;
@@ -151,7 +155,7 @@ export class ExportRunner {
 				try {
 					await writer.copyBinaryFile(
 						att.sourcePath,
-						`${effectivePlan.outputRoot}/${att.outputRelativePath}`,
+						`${assetsRoot}/${att.outputRelativePath}`,
 					);
 				} catch {
 					allWarnings.push(`Failed to copy attachment: ${att.sourcePath}`);
@@ -166,7 +170,7 @@ export class ExportRunner {
 				.join("\n");
 
 			await writer.writeText(
-				`${effectivePlan.outputRoot}/export-report.md`,
+				`${assetsRoot}/export-report.md`,
 				`# Export Warnings\n\n${report}\n`,
 			);
 		}
