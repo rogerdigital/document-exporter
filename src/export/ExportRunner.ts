@@ -15,6 +15,20 @@ export interface ExportResult {
 	warnings: string[];
 }
 
+export interface ExportProgressCallbacks {
+	onFileStart: (fileIndex: number, totalFiles: number, fileName: string) => void;
+	onFileComplete: (fileIndex: number, totalFiles: number) => void;
+	onPhase: (phase: string) => void;
+}
+
+export const SINGLE_FILE_PHASES = [
+	"Assembling document",
+	"Collecting attachments",
+	"Rewriting links",
+	"Rendering output",
+	"Copying attachments",
+] as const;
+
 export class ExportRunner {
 	private app: App;
 	private cancelled = false;
@@ -30,6 +44,7 @@ export class ExportRunner {
 	async run(
 		plan: ExportPlan,
 		settings: ExportSettings,
+		callbacks?: ExportProgressCallbacks,
 	): Promise<ExportResult> {
 		const writer = new OutputWriter(this.app);
 		const allWarnings: string[] = [];
@@ -43,7 +58,6 @@ export class ExportRunner {
 			};
 		}
 
-		// Resolve TFile objects from plan input paths
 		const files = plan.inputFiles
 			.map((p) => this.app.vault.getAbstractFileByPath(p))
 			.filter(
@@ -63,7 +77,6 @@ export class ExportRunner {
 			allWarnings.push(`Large export: ${files.length} files. This may take a while.`);
 		}
 
-		// Handle existing output folder
 		let outputRoot = plan.outputRoot;
 		if (!settings.overwriteExisting && !writer.isExternal(outputRoot)) {
 			if (writer.folderExists(outputRoot)) {
@@ -78,7 +91,6 @@ export class ExportRunner {
 			? `${outputRoot}/${effectivePlan.outputFolderName}`
 			: outputRoot;
 
-		// Build output path map: sourcePath -> outputPath
 		const outputPathMap = new Map<string, string>();
 		for (let i = 0; i < plan.inputFiles.length; i++) {
 			outputPathMap.set(plan.inputFiles[i], plan.outputFiles[i]);
@@ -87,27 +99,36 @@ export class ExportRunner {
 		const assembler = new DocumentAssembler(this.app, settings.includeSourcePathComments);
 		const copiedAttachments = new Set<string>();
 
-		// Export each file individually
+		const isSingleFile = files.length === 1;
+		let completedFiles = 0;
+
 		for (let i = 0; i < files.length; i++) {
-			if (this.cancelled) return this.cancelledResult(outputRoot);
+			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
 			const file = files[i];
 			const outputFilePath = plan.outputFiles[i];
 
+			callbacks?.onFileStart(i, files.length, file.basename);
+
 			// Step 1: Assemble single-file document
+			callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[0] : `Assembling ${file.basename}`);
 			const doc = await assembler.assemble([file]);
+			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
 			// Step 2: Collect attachments for this file
 			let attachments = plan.attachmentCopies;
 			if (settings.copyAttachments) {
+				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[1] : `Collecting attachments for ${file.basename}`);
 				const collector = new AttachmentCollector(this.app, exportedPaths);
 				const collectResult = await collector.collect([file]);
 				attachments = collectResult.attachments;
 				allWarnings.push(...collectResult.warnings);
 			}
 			doc.attachments = attachments;
+			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
 			// Step 3: Rewrite links
+			callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[2] : `Rewriting links in ${file.basename}`);
 			const rewriter = new LinkRewriter(
 				this.app,
 				exportedPaths,
@@ -122,12 +143,14 @@ export class ExportRunner {
 				section.markdown = result.markdown;
 				allWarnings.push(...result.warnings);
 			}
+			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
 			// Step 4: Ensure output folder exists
 			const outputDir = outputFilePath.substring(0, outputFilePath.lastIndexOf("/"));
 			await writer.ensureFolder(outputDir);
 
 			// Step 5: Render format
+			callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[3] : `Rendering ${file.basename}`);
 			let formatWarnings: string[] = [];
 			switch (effectivePlan.profile) {
 				case "markdown-bundle":
@@ -144,23 +167,28 @@ export class ExportRunner {
 					break;
 			}
 			allWarnings.push(...formatWarnings);
+			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
-			// Copy attachments (deduplicate across files)
+			// Step 6: Copy attachments (deduplicate across files)
 			if (doc.attachments.length > 0) {
+				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[4] : `Copying attachments for ${file.basename}`);
 				await writer.ensureFolder(`${assetsRoot}/assets`);
-			}
-			for (const att of doc.attachments) {
-				if (copiedAttachments.has(att.outputRelativePath)) continue;
-				copiedAttachments.add(att.outputRelativePath);
-				try {
-					await writer.copyBinaryFile(
-						att.sourcePath,
-						`${assetsRoot}/${att.outputRelativePath}`,
-					);
-				} catch {
-					allWarnings.push(`Failed to copy attachment: ${att.sourcePath}`);
+				for (const att of doc.attachments) {
+					if (copiedAttachments.has(att.outputRelativePath)) continue;
+					copiedAttachments.add(att.outputRelativePath);
+					try {
+						await writer.copyBinaryFile(
+							att.sourcePath,
+							`${assetsRoot}/${att.outputRelativePath}`,
+						);
+					} catch {
+						allWarnings.push(`Failed to copy attachment: ${att.sourcePath}`);
+					}
 				}
 			}
+
+			completedFiles++;
+			callbacks?.onFileComplete(i, files.length);
 		}
 
 		// Write export report
@@ -182,11 +210,14 @@ export class ExportRunner {
 		};
 	}
 
-	private cancelledResult(outputRoot: string): ExportResult {
+	private cancelledResult(outputRoot: string, completed: number, total: number): ExportResult {
+		const msg = total === 1
+			? "Export was cancelled."
+			: `Export was cancelled. ${completed} of ${total} file(s) exported.`;
 		return {
-			success: false,
+			success: completed > 0,
 			outputRoot,
-			warnings: ["Export was cancelled."],
+			warnings: [msg],
 		};
 	}
 }

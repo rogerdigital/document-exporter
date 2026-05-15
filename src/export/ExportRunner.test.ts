@@ -1,0 +1,131 @@
+import { describe, it, expect, vi } from "vitest";
+import { ExportRunner, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
+
+function createFile(path: string) {
+	return { path, basename: path.split("/").pop()?.replace(/\.md$/, "") ?? path, extension: "md" };
+}
+
+function createMockApp(files: string[]) {
+	const fileMap = new Map(files.map((p) => [p, createFile(p)]));
+	return {
+		vault: {
+			getAbstractFileByPath: vi.fn((path: string) => fileMap.get(path) ?? null),
+			read: vi.fn(() => Promise.resolve("content")),
+			getMarkdownFiles: vi.fn(() => []),
+			createFolder: vi.fn(),
+			create: vi.fn(),
+			modify: vi.fn(),
+			createBinary: vi.fn(),
+			readBinary: vi.fn(() => Promise.resolve(new ArrayBuffer(0))),
+			adapter: {},
+		},
+		metadataCache: {
+			getFileCache: vi.fn(() => ({ frontmatter: {}, links: [], embeds: [] })),
+		},
+	};
+}
+
+function defaultSettings() {
+	return {
+		defaultProfile: "markdown-bundle" as const,
+		defaultOutputFolder: "exports",
+		includeSourcePathComments: false,
+		copyAttachments: false,
+		overwriteExisting: false,
+	};
+}
+
+function makePlan(files: string[]) {
+	return {
+		profile: "markdown-bundle" as const,
+		source: { type: "current-file" as const, path: files[0] },
+		inputFiles: files,
+		outputRoot: "exports",
+		outputFilename: "output",
+		outputFolderName: undefined,
+		outputFiles: files.map((f) => `exports/${f.split("/").pop()}`),
+		attachmentCopies: [],
+	};
+}
+
+describe("ExportRunner", () => {
+	describe("SINGLE_FILE_PHASES", () => {
+		it("has 5 phases", () => {
+			expect(SINGLE_FILE_PHASES).toHaveLength(5);
+		});
+	});
+
+	describe("callbacks", () => {
+		it("calls onFileStart for each file", async () => {
+			const app = createMockApp(["a.md", "b.md"]);
+			const plan = makePlan(["a.md", "b.md"]);
+			const runner = new ExportRunner(app as never);
+			const onFileStart = vi.fn();
+			await runner.run(plan, defaultSettings(), { onFileStart, onFileComplete: vi.fn(), onPhase: vi.fn() });
+			expect(onFileStart).toHaveBeenCalledTimes(2);
+			expect(onFileStart).toHaveBeenCalledWith(0, 2, "a");
+			expect(onFileStart).toHaveBeenCalledWith(1, 2, "b");
+		});
+
+		it("calls onFileComplete for each file", async () => {
+			const app = createMockApp(["a.md", "b.md"]);
+			const plan = makePlan(["a.md", "b.md"]);
+			const runner = new ExportRunner(app as never);
+			const onFileComplete = vi.fn();
+			await runner.run(plan, defaultSettings(), { onFileStart: vi.fn(), onFileComplete, onPhase: vi.fn() });
+			expect(onFileComplete).toHaveBeenCalledTimes(2);
+		});
+
+		it("calls onPhase for each step within a file", async () => {
+			const app = createMockApp(["a.md"]);
+			const plan = makePlan(["a.md"]);
+			const runner = new ExportRunner(app as never);
+			const onPhase = vi.fn();
+			await runner.run(plan, defaultSettings(), { onFileStart: vi.fn(), onFileComplete: vi.fn(), onPhase });
+			expect(onPhase.mock.calls.length).toBeGreaterThanOrEqual(3);
+		});
+	});
+
+	describe("cancel", () => {
+		it("returns partial success when cancelled after some files", async () => {
+			const app = createMockApp(["a.md", "b.md", "c.md"]);
+			const plan = makePlan(["a.md", "b.md", "c.md"]);
+			const runner = new ExportRunner(app as never);
+
+			let cancelAfterFirst = false;
+			const callbacks = {
+				onFileStart: vi.fn(),
+				onFileComplete: vi.fn(() => {
+					if (!cancelAfterFirst) {
+						cancelAfterFirst = true;
+						runner.cancel();
+					}
+				}),
+				onPhase: vi.fn(),
+			};
+
+			const result = await runner.run(plan, defaultSettings(), callbacks);
+			expect(result.success).toBe(true);
+			expect(result.warnings[0]).toContain("cancelled");
+			expect(result.warnings[0]).toContain("file(s) exported");
+		});
+
+		it("returns failure when cancelled before any file completes", async () => {
+			const app = createMockApp(["a.md", "b.md"]);
+			const plan = makePlan(["a.md", "b.md"]);
+			const runner = new ExportRunner(app as never);
+
+			const callbacks = {
+				onFileStart: vi.fn(),
+				onFileComplete: vi.fn(),
+				onPhase: vi.fn(() => {
+					runner.cancel();
+				}),
+			};
+
+			const result = await runner.run(plan, defaultSettings(), callbacks);
+			expect(result.success).toBe(false);
+			expect(result.warnings[0]).toContain("cancelled");
+		});
+	});
+});
