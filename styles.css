@@ -64,8 +64,8 @@
 
 /* Progress Notice */
 
-.de-progress-notice {
-	padding: 12px 16px !important;
+.notice.de-progress-notice {
+	padding: 12px 16px;
 	min-width: 280px;
 	max-width: 400px;
 }
