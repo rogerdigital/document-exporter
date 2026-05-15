@@ -5,8 +5,8 @@
 Obsidian plugin for exporting notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.
 
 - Plugin ID: `document-exporter`
-- Current version: `0.1.0`
-- Min Obsidian version: `1.0.0`
+- Current version: `0.4.1`
+- Min Obsidian version: `1.4.0`
 
 ## Tech Stack
 
@@ -40,23 +40,32 @@ src/
     ExportRunner.ts          Orchestrate the full pipeline
   formats/             Output renderers
     markdown-bundle.ts       Combined document.md + assets/
-    html-document.ts         Standalone index.html with TOC and CSS
-    print-html.ts            HTML with print stylesheet
+    html-document.ts         Standalone index.html with TOC and CSS (also handles print-ready HTML)
+    pdf.ts                   PDF export via browser window
+    docx.ts                  Word document export
   ui/                  Modal and progress UI
+    ExportModal.ts           Two-step export configuration modal
+    ProgressNotice.ts        Visual progress bar with cancel button
 ```
 
 ## Conventions
 
 - Use duck-typing (`"extension" in f`) instead of `instanceof TFile`/`TFolder` — enables Vitest without mocking obsidian module
 - Tests live alongside source: `*.test.ts` in the same directory
-- Export profiles: `markdown-bundle`, `html-document`, `print-html`
 - All module imports use `@/` path alias
+- DOM-dependent tests (e.g. ProgressNotice) need `// @ts-nocheck` and `/** @vitest-environment jsdom */` at top; Obsidian HTMLElement methods (`empty`, `createDiv`, `createEl`, `createSpan`) must be polyfilled in the test mock
 
 ## Git
 
 - Branch: `main` is protected (PR required, CI must pass, no force push)
 - Commit messages: conventional commits (`feat:`, `fix:`, `chore:`, `docs:`)
 - No co-author or AI attribution in commits
+- Plugin directory in vault (`~/.obsidian/plugins/document-exporter/`) is a symlink to repo root — build artifacts are live after `npm run build`
+
+## Release
+
+- CI has an automatic release workflow triggered by tags — do NOT manually run `gh release create` after pushing a tag, it will conflict
+- Release steps: bump version in `manifest.json` + `versions.json` → PR → merge → `git tag -a X.Y.Z` → `git push origin X.Y.Z` → CI creates the release with `main.js`, `manifest.json`, `styles.css`
 
 ## Key References
 
