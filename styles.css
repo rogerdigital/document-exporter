@@ -21,6 +21,8 @@
 .export-modal-source-fields {
 	margin-left: 9em;
 	margin-bottom: 0.75em;
+	display: flex;
+	justify-content: flex-end;
 }
 
 .export-modal-input-group {
