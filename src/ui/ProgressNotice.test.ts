@@ -7,20 +7,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 function extendElement(el: HTMLElement): HTMLElement {
 	el.empty = () => { el.innerHTML = ""; };
 	el.createDiv = (opts?: { cls?: string; text?: string }) => {
-		const div = extendElement(document.createElement("div"));
+		const div = extendElement(activeDocument.createElement("div"));
 		if (opts?.cls) div.classList.add(...opts.cls.split(" "));
 		if (opts?.text) div.textContent = opts.text;
 		el.appendChild(div);
 		return div;
 	};
 	el.createSpan = (opts?: { text?: string }) => {
-		const span = extendElement(document.createElement("span"));
+		const span = extendElement(activeDocument.createElement("span"));
 		if (opts?.text) span.textContent = opts.text;
 		el.appendChild(span);
 		return span;
 	};
 	el.createEl = (tag: string, opts?: { text?: string; cls?: string }) => {
-		const child = extendElement(document.createElement(tag));
+		const child = extendElement(activeDocument.createElement(tag));
 		if (opts?.text) child.textContent = opts.text;
 		if (opts?.cls) child.classList.add(...opts.cls.split(" "));
 		el.appendChild(child);
@@ -39,7 +39,7 @@ vi.mock("obsidian", () => ({
 		constructor(message: string, timeout: number) {
 			this.message = message;
 			this.timeout = timeout;
-			this.noticeEl = extendElement(document.createElement("div"));
+			this.noticeEl = extendElement(activeDocument.createElement("div"));
 			noticeInstances.push({ noticeEl: this.noticeEl, message });
 		}
 		setMessage(msg: string) { this.message = msg; }
@@ -55,6 +55,10 @@ function lastNotice() {
 
 describe("ProgressNotice", () => {
 	beforeEach(() => {
+		Object.defineProperty(window, "activeDocument", {
+			value: window.document,
+			configurable: true,
+		});
 		noticeInstances.length = 0;
 	});
 
@@ -126,7 +130,7 @@ describe("ProgressNotice", () => {
 	it("updates title dynamically", () => {
 		const p = new ProgressNotice("Old");
 		p.start(5);
-		p.setTitle("New Title");
-		expect(lastNotice().noticeEl.querySelector(".de-progress-title")?.textContent).toBe("New Title");
+		p.setTitle("New title");
+		expect(lastNotice().noticeEl.querySelector(".de-progress-title")?.textContent).toBe("New title");
 	});
 });
