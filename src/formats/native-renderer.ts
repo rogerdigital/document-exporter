@@ -129,14 +129,20 @@ async function waitForPostProcessors(
 	timeout: number,
 ): Promise<boolean> {
 	return new Promise((resolve) => {
-		let timer: number;
-		let overallTimer: number;
+		let timer: number | undefined;
+		let overallTimer: number | undefined;
+
+		const clearTimer = (timerId: number | undefined) => {
+			if (timerId !== undefined) {
+				window.clearTimeout(timerId);
+			}
+		};
 
 		const observer = new MutationObserver(() => {
-			window.clearTimeout(timer);
+			clearTimer(timer);
 			timer = window.setTimeout(() => {
 				observer.disconnect();
-				window.clearTimeout(overallTimer);
+				clearTimer(overallTimer);
 				resolve(true);
 			}, DEBOUNCE_INTERVAL);
 		});
@@ -146,14 +152,14 @@ async function waitForPostProcessors(
 		// Initial debounce in case no mutations fire (rendering already complete)
 		timer = window.setTimeout(() => {
 			observer.disconnect();
-			window.clearTimeout(overallTimer);
+			clearTimer(overallTimer);
 			resolve(true);
 		}, DEBOUNCE_INTERVAL);
 
 		// Overall timeout safety net
 		overallTimer = window.setTimeout(() => {
 			observer.disconnect();
-			window.clearTimeout(timer);
+			clearTimer(timer);
 			resolve(false);
 		}, timeout);
 	});

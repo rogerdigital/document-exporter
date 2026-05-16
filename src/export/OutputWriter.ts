@@ -49,14 +49,14 @@ export class OutputWriter {
 		}
 	}
 
-	async writeBinary(filePath: string, data: ArrayBuffer | Buffer | Uint8Array): Promise<void> {
+	async writeBinary(filePath: string, data: ArrayBuffer | Uint8Array): Promise<void> {
 		if (this.isExternal(filePath)) {
 			if (!nodeFs) return;
-			nodeFs.writeFileSync(filePath, new Uint8Array(data as ArrayBuffer));
+			nodeFs.writeFileSync(filePath, data instanceof Uint8Array ? data : new Uint8Array(data));
 			return;
 		}
 
-		const buffer = data instanceof ArrayBuffer ? data : (data as Uint8Array).buffer as ArrayBuffer;
+		const buffer = data instanceof ArrayBuffer ? data : uint8ArrayToArrayBuffer(data);
 		const existing = this.app.vault.getAbstractFileByPath(filePath);
 		if (existing instanceof TFile) {
 			await this.app.vault.modifyBinary(existing, buffer);
@@ -112,4 +112,10 @@ export class OutputWriter {
 		if (/^[A-Za-z]:/.test(p)) return true;
 		return false;
 	}
+}
+
+function uint8ArrayToArrayBuffer(data: Uint8Array): ArrayBuffer {
+	const buffer = new ArrayBuffer(data.byteLength);
+	new Uint8Array(buffer).set(data);
+	return buffer;
 }
