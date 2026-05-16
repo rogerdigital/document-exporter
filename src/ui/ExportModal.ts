@@ -401,7 +401,7 @@ class FilePickerModal extends Modal {
 		if (!this.listEl) return;
 		this.listEl.empty();
 
-		const allFiles = this.app.vault.getMarkdownFiles();
+		const allFiles = collectMarkdownFiles(this.app.vault.getRoot());
 		const filtered = this.filterText
 			? allFiles.filter((f) => f.path.toLowerCase().includes(this.filterText))
 			: allFiles;
@@ -422,6 +422,18 @@ class FilePickerModal extends Modal {
 			label.appendText(" " + file.path);
 		}
 	}
+}
+
+function collectMarkdownFiles(folder: TFolder): TFile[] {
+	const files: TFile[] = [];
+	for (const child of folder.children) {
+		if (child instanceof TFile && child.extension === "md") {
+			files.push(child);
+		} else if (child instanceof TFolder) {
+			files.push(...collectMarkdownFiles(child));
+		}
+	}
+	return files;
 }
 
 class FolderPickerModal extends FuzzySuggestModal<TFolder> {
