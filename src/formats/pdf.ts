@@ -107,6 +107,58 @@ async function renderSections(
 	return { html: parts.join("\n"), warnings: allWarnings };
 }
 
+type PdfData = ArrayBuffer | Uint8Array;
+
+interface PdfWebContents {
+	executeJavaScript: <T>(code: string) => Promise<T>;
+	printToPDF: (options: {
+		printBackground: boolean;
+		pageSize: "A4";
+		margins: {
+			top: number;
+			bottom: number;
+			left: number;
+			right: number;
+		};
+	}) => Promise<PdfData>;
+}
+
+interface PdfBrowserWindow {
+	loadURL: (url: string) => Promise<void>;
+	showInactive?: () => void;
+	close: () => void;
+	webContents: PdfWebContents;
+}
+
+interface PdfBrowserWindowConstructor {
+	new (options: {
+		show: boolean;
+		frame: boolean;
+		skipTaskbar: boolean;
+		focusable: boolean;
+		transparent: boolean;
+		backgroundColor: string;
+		opacity: number;
+		width: number;
+		height: number;
+		webPreferences: {
+			contextIsolation: boolean;
+			nodeIntegration: boolean;
+		};
+	}): PdfBrowserWindow;
+}
+
+interface ElectronModule {
+	remote?: {
+		BrowserWindow?: PdfBrowserWindowConstructor;
+	};
+}
+
+interface DesktopWindow extends Window {
+	electron?: unknown;
+	require?: (moduleId: string) => unknown;
+}
+
 export function buildPdfHtml(htmlBody: string, css: string): string {
 	return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Export</title><style>${css}
@@ -114,46 +166,26 @@ ${PDF_PAGE_RESET_CSS}</style></head>
 <body><main class="pdf-export-page markdown-rendered">${htmlBody}</main></body></html>`;
 }
 
-interface ElectronWebContents {
-	printToPDF(options: Record<string, unknown>): Promise<ArrayBuffer>;
-	executeJavaScript<T>(code: string): Promise<T>;
-}
-
-interface ElectronBrowserWindow {
-	webContents: ElectronWebContents;
-	loadURL(url: string): Promise<void>;
-	showInactive(): void;
-	close(): void;
-}
-
-type ElectronBrowserWindowCtor = new (options: Record<string, unknown>) => ElectronBrowserWindow;
-
-function getBrowserWindowCtor(): ElectronBrowserWindowCtor {
-	// @ts-expect-error — Electron remote not in browser type definitions
-	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Electron remote only available at runtime in Obsidian desktop
-	const electron = window.electron ?? window.require?.("electron");
-	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Electron remote module not in type definitions
-	if (!electron?.remote?.BrowserWindow) {
-		throw new Error("electron.remote.BrowserWindow not available");
-	}
-	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return -- Electron BrowserWindow constructor from runtime remote module
-	return electron.remote.BrowserWindow;
-}
-
 async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uint8Array> {
+	if (!Platform.isDesktop) {
+		throw new Error("PDF export requires the desktop app.");
+	}
+
 	const fullHtml = buildPdfHtml(htmlBody, css);
+	const printUrl = `data:text/html;charset=utf-8,${encodeURIComponent(fullHtml)}`;
 
-	/* eslint-disable @typescript-eslint/no-require-imports */
-	const fs = require("fs") as typeof import("fs");
-	const path = require("path") as typeof import("path");
-	const os = require("os") as typeof import("os");
-	/* eslint-enable @typescript-eslint/no-require-imports */
+	const electron = getElectronModule();
+	const remote = electron.remote;
+	if (!remote) {
+		throw new Error("electron.remote not available - cannot create BrowserWindow");
+	}
 
-	const tmpFile = path.join(os.tmpdir(), `obsidian-pdf-export-${Date.now()}.html`);
-	fs.writeFileSync(tmpFile, fullHtml, "utf-8");
+	const BrowserWindow = remote.BrowserWindow;
+	if (!BrowserWindow) {
+		throw new Error("BrowserWindow not found on electron.remote");
+	}
 
-	const BrowserWindowCtor = getBrowserWindowCtor();
-	const win = new BrowserWindowCtor({
+	const win = new BrowserWindow({
 		show: true,
 		frame: false,
 		skipTaskbar: true,
@@ -170,7 +202,7 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uin
 	});
 
 	try {
-		await win.loadURL(`file://${tmpFile}`);
+		await win.loadURL(printUrl);
 		if (typeof win.showInactive === "function") {
 			win.showInactive();
 		}
@@ -188,14 +220,30 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uin
 			},
 		});
 
-		return new Uint8Array(pdfData);
+		return pdfData instanceof Uint8Array ? pdfData : new Uint8Array(pdfData);
 	} finally {
 		win.close();
-		try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
 	}
 }
 
-async function waitForPrintableContent(win: { webContents: { executeJavaScript: <T>(code: string) => Promise<T> } }): Promise<void> {
+function getElectronModule(): ElectronModule {
+	const desktopWindow = window as DesktopWindow;
+	const electron = desktopWindow.electron ?? desktopWindow.require?.("electron");
+	if (!isElectronModule(electron)) {
+		throw new Error("electron module not available");
+	}
+	return electron;
+}
+
+function isElectronModule(value: unknown): value is ElectronModule {
+	if (!value || typeof value !== "object") return false;
+	const remote = (value as { remote?: unknown }).remote;
+	if (!remote || typeof remote !== "object") return false;
+	const BrowserWindow = (remote as { BrowserWindow?: unknown }).BrowserWindow;
+	return typeof BrowserWindow === "function";
+}
+
+async function waitForPrintableContent(win: { webContents: Pick<PdfWebContents, "executeJavaScript"> }): Promise<void> {
 	const printable = await win.webContents.executeJavaScript<{
 		textLength: number;
 		width: number;
