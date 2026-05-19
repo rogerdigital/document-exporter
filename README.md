@@ -2,6 +2,8 @@
 
 Export single notes, entire folders, or hand-picked files into PDF, Word, Markdown bundles, and HTML documents. Supports batch export with directory structure preservation.
 
+![Document Exporter selected files to PDF](docs/images/document-exporter-selected-files-pdf.gif)
+
 ## Features
 
 - **Batch export** — export an entire folder or selected files at once, preserving directory structure
