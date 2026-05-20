@@ -254,6 +254,7 @@ ${body}
 </html>`;
 }
 
-const HTML_EXPORT_RESET_CSS = `html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; }
+const HTML_EXPORT_RESET_CSS = `html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; contain: none !important; overscroll-behavior: auto !important; }
 body { display: block !important; box-sizing: border-box; padding: 2rem; max-width: 800px; margin: 0 auto; }
-main.markdown-rendered, main.markdown-rendered section { display: block !important; visibility: visible !important; height: auto !important; overflow: visible !important; }`;
+main.markdown-rendered, main.markdown-rendered section { display: block !important; visibility: visible !important; height: auto !important; overflow: visible !important; }
+main.markdown-rendered img { max-width: 384px; height: auto; }`;

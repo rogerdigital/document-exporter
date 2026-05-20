@@ -84,7 +84,7 @@ describe("HTML Document rendering", () => {
 			expect(html).toContain("<body>");
 			expect(html).toContain('<main class="markdown-rendered">');
 			expect(html).not.toContain("app-container");
-			expect(html).toContain("html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; }");
+			expect(html).toContain("html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; contain: none !important; overscroll-behavior: auto !important; }");
 			expect(html).toContain("<p>Body</p>");
 		});
 	});
