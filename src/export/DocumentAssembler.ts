@@ -57,13 +57,13 @@ export function stripFrontmatter(
 		return { body: content, frontmatter: {} };
 	}
 
-	const endIndex = content.indexOf("---", 3);
-	if (endIndex === -1) {
+	const closingIndex = content.indexOf("\n---\n", 3);
+	if (closingIndex === -1) {
 		return { body: content, frontmatter: {} };
 	}
 
-	const yamlBlock = content.slice(3, endIndex).trim();
-	const body = content.slice(endIndex + 3).trimStart();
+	const yamlBlock = content.slice(3, closingIndex).trim();
+	const body = content.slice(closingIndex + 5).trimStart();
 
 	const frontmatter: Record<string, unknown> = {};
 	for (const line of yamlBlock.split("\n")) {

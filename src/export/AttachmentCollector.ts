@@ -146,8 +146,18 @@ export class AttachmentCollector {
 		const dir = file.path.includes("/")
 			? file.path.substring(0, file.path.lastIndexOf("/")).split("/").pop()!
 			: "";
-		const prefixed = dir ? `${dir}-${file.name}` : file.name;
-		usedNames.add(prefixed);
-		return prefixed;
+		const base = dir ? `${dir}-${file.name}` : file.name;
+		if (!usedNames.has(base)) {
+			usedNames.add(base);
+			return base;
+		}
+		let n = 1;
+		let name: string;
+		do {
+			name = `${dir}-${n}-${file.name}`;
+			n++;
+		} while (usedNames.has(name));
+		usedNames.add(name);
+		return name;
 	}
 }

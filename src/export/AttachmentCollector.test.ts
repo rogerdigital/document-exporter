@@ -165,4 +165,39 @@ describe("AttachmentCollector", () => {
 		const outputPaths = result.attachments.map(a => a.outputRelativePath);
 		expect(outputPaths[0]).not.toBe(outputPaths[1]);
 	});
+
+	it("handles triple collision with counter suffix", async () => {
+		const fileA: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
+		const fileB: MockFile = { path: "notes/b.md", extension: "md", name: "b.md" };
+		const fileC: MockFile = { path: "notes/c.md", extension: "md", name: "c.md" };
+
+		const app = createMockApp(
+			{
+				"notes/a.md": [{ link: "image.png" }],
+				"notes/b.md": [{ link: "photos/image.png" }],
+				"notes/c.md": [{ link: "images/image.png" }],
+			},
+		);
+
+		(app.vault.getAbstractFileByPath as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+			if (path === "assets/image.png") return { path, extension: "png", name: "image.png" };
+			if (path === "photos/image.png") return { path, extension: "png", name: "image.png" };
+			if (path === "images/image.png") return { path, extension: "png", name: "image.png" };
+			return null;
+		});
+		(app.metadataCache.getFirstLinkpathDest as ReturnType<typeof vi.fn>).mockImplementation((link: string) => {
+			if (link === "image.png") return { path: "assets/image.png" };
+			if (link === "photos/image.png") return { path: "photos/image.png" };
+			if (link === "images/image.png") return { path: "images/image.png" };
+			return null;
+		});
+
+		const collector = new AttachmentCollector(app as never, new Set());
+		const result = await collector.collect([fileA as never, fileB as never, fileC as never]);
+
+		expect(result.attachments).toHaveLength(3);
+		const outputPaths = result.attachments.map(a => a.outputRelativePath);
+		const uniquePaths = new Set(outputPaths);
+		expect(uniquePaths.size).toBe(3);
+	});
 });
