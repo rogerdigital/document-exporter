@@ -57,10 +57,46 @@ export default class DocumentExporterPlugin extends Plugin {
 			}),
 		);
 
+		// Notebook Navigator context menu integration
+		this.registerNotebookNavigatorMenus();
+
 		this.addSettingTab(new DocumentExporterSettingTab(this.app, this));
 	}
 
 	onunload() {}
+
+	private registerNotebookNavigatorMenus() {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const nnMenus = (this.app as any)?.plugins?.plugins?.["notebook-navigator"]?.api?.menus;
+		if (!nnMenus) return;
+
+		if (typeof nnMenus.registerFileMenu === "function") {
+			const dispose = nnMenus.registerFileMenu((context: any) => {
+				if (context.selection?.mode !== "single") return;
+				const file = context.file;
+				if (!file || !("extension" in file) || file.extension !== "md") return;
+				context.addItem((item: any) => {
+					item.setTitle("Export this file")
+						.setIcon("file-output")
+						.onClick(() => this.openExportModal(file, undefined));
+				});
+			});
+			this.register(() => dispose());
+		}
+
+		if (typeof nnMenus.registerFolderMenu === "function") {
+			const dispose = nnMenus.registerFolderMenu((context: any) => {
+				const folder = context.folder;
+				if (!folder) return;
+				context.addItem((item: any) => {
+					item.setTitle("Export this folder")
+						.setIcon("file-output")
+						.onClick(() => this.openExportModal(undefined, folder));
+				});
+			});
+			this.register(() => dispose());
+		}
+	}
 
 	async saveSettings() {
 		await saveSettings(this, this.settings);
