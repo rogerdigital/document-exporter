@@ -7,6 +7,7 @@ type DocxRun = {
 	bold?: boolean;
 	italics?: boolean;
 	code?: boolean;
+	emoji?: boolean;
 	drawing?: string;
 };
 
@@ -279,15 +280,15 @@ function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] 
 
 	while ((match = regex.exec(text)) !== null) {
 		if (match.index > lastIndex) {
-			runs.push({ text: text.slice(lastIndex, match.index) });
+			runs.push(createTextRun(text.slice(lastIndex, match.index)));
 		}
 
 		if (match[1]) {
-			runs.push({ text: match[2], bold: true });
+			runs.push(createTextRun(match[2], { bold: true }));
 		} else if (match[3]) {
-			runs.push({ text: match[4], italics: true });
+			runs.push(createTextRun(match[4], { italics: true }));
 		} else if (match[5]) {
-			runs.push({ text: match[6], code: true });
+			runs.push(createTextRun(match[6], { code: true }));
 		} else if (match[10]) {
 			const altText = match[11] || "image";
 			const imgRef = match[12];
@@ -295,20 +296,28 @@ function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] 
 			if (img) {
 				runs.push({ text: "", drawing: buildDrawingXml(img, altText) });
 			} else {
-				runs.push({ text: `[Image: ${altText}]`, italics: true });
+				runs.push(createTextRun(`[Image: ${altText}]`, { italics: true }));
 			}
 		} else if (match[7]) {
-			runs.push({ text: match[8] });
+			runs.push(createTextRun(match[8]));
 		}
 
 		lastIndex = match.index + match[0].length;
 	}
 
 	if (lastIndex < text.length) {
-		runs.push({ text: text.slice(lastIndex) });
+		runs.push(createTextRun(text.slice(lastIndex)));
 	}
 
-	return runs.length > 0 ? runs : [{ text }];
+	return runs.length > 0 ? runs : [createTextRun(text)];
+}
+
+function createTextRun(text: string, options: Omit<DocxRun, "text" | "drawing" | "emoji"> = {}): DocxRun {
+	return {
+		text,
+		...options,
+		emoji: containsEmoji(text),
+	};
 }
 
 function findImage(ref: string, imageMap: Map<string, DocxImage>): DocxImage | null {
@@ -381,6 +390,7 @@ function runToXml(run: DocxRun): string {
 		return `<w:r>${run.drawing}</w:r>`;
 	}
 	const props: string[] = [];
+	if (run.emoji) props.push('<w:rFonts w:ascii="Apple Color Emoji" w:hAnsi="Apple Color Emoji" w:eastAsia="Apple Color Emoji" w:cs="Apple Color Emoji"/>');
 	if (run.bold) props.push("<w:b/>");
 	if (run.italics) props.push("<w:i/>");
 	if (run.code) props.push('<w:rStyle w:val="CodeChar"/>');
@@ -430,6 +440,10 @@ function escapeXml(value: string): string {
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;")
 		.replace(/"/g, "&quot;");
+}
+
+function containsEmoji(value: string): boolean {
+	return /[\p{Extended_Pictographic}\uFE0F]/u.test(value);
 }
 
 function createZip(files: { name: string; data: Uint8Array }[]): Uint8Array {

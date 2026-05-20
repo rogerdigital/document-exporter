@@ -71,6 +71,35 @@ describe("DOCX rendering", () => {
 		expect(packageText).toContain("Heading6");
 	});
 
+	it("uses emoji-capable font hints for runs containing emoji", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				writtenData = data;
+			}),
+		};
+		const doc: AssembledDocument = {
+			title: "Emoji Test",
+			sections: [{
+				title: "Emoji Test",
+				sourcePath: "a.md",
+				markdown: "早上好，周六😁\n老婆早起给做了杯咖啡😘",
+				frontmatter: {},
+			}],
+			attachments: [],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		expect(packageText).toContain("😁");
+		expect(packageText).toContain("😘");
+		expect(packageText).toContain('<w:rFonts w:ascii="Apple Color Emoji"');
+		expect(packageText).toContain('w:eastAsia="Apple Color Emoji"');
+	});
+
 	it("includes image drawing elements when attachments are present", async () => {
 		let writtenData: Uint8Array | null = null;
 		const writer = {
