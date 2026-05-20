@@ -331,9 +331,9 @@ body,
 
 .pdf-export-page img {
 	display: block;
-	max-width: min(100%, 420px);
+	max-width: min(100%, 384px);
 	height: auto;
-	margin: 1rem auto;
+	margin: 1rem 0;
 	page-break-inside: avoid;
 }
 `;

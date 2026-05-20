@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { buildHtmlDoc } from "@/formats/html-document";
 
 describe("HTML Document rendering", () => {
 	describe("TOC generation", () => {
@@ -75,6 +76,14 @@ describe("HTML Document rendering", () => {
 			expect(html).toContain("max-width: min(100%, 560px)");
 			expect(html).toContain("display: block");
 			expect(html).toContain("margin: 1rem auto");
+		});
+
+		it("keeps exported pages scrollable when custom app styles are included", () => {
+			const html = buildHtmlDoc("Test", "", "<p>Body</p>", "html, body { height: 100%; overflow: hidden; }");
+
+			expect(html).toContain('<body class="markdown-rendered">');
+			expect(html).not.toContain("app-container");
+			expect(html).toContain("html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; }");
 		});
 	});
 

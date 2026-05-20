@@ -231,7 +231,7 @@ export function buildHtmlDoc(
 	customCss: string | null = null,
 ): string {
 	const css = customCss ?? DEFAULT_CSS;
-	const bodyClass = customCss ? "app-container markdown-rendered" : "";
+	const bodyClass = customCss ? "markdown-rendered" : "";
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -241,7 +241,7 @@ export function buildHtmlDoc(
 <title>${escapeHtml(title)}</title>
 <style>
 ${css}
-${customCss ? `body { padding: 2rem; max-width: 800px; margin: 0 auto; }` : ""}
+${customCss ? HTML_EXPORT_RESET_CSS : ""}
 </style>
 </head>
 <body class="${bodyClass}">
@@ -251,3 +251,6 @@ ${body}
 </body>
 </html>`;
 }
+
+const HTML_EXPORT_RESET_CSS = `html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; }
+body { display: block !important; box-sizing: border-box; padding: 2rem; max-width: 800px; margin: 0 auto; }`;

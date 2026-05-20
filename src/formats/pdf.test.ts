@@ -22,9 +22,9 @@ describe("PDF rendering", () => {
 		const html = buildPdfHtml("<p><img src=\"image.png\"></p>", "");
 
 		expect(html).toContain(".pdf-export-page img");
-		expect(html).toContain("max-width: min(100%, 420px)");
+		expect(html).toContain("max-width: min(100%, 384px)");
 		expect(html).toContain("display: block");
-		expect(html).toContain("margin: 1rem auto");
+		expect(html).toContain("margin: 1rem 0");
 	});
 
 	it("creates the print window hidden and non-focusable", () => {
