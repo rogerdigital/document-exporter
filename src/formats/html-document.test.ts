@@ -51,6 +51,20 @@ describe("HTML Document rendering", () => {
 
 			expect(writtenFiles).toContain("exports/assets");
 		});
+
+		it("renders safe embedded video tags without escaping them", async () => {
+			const { html } = await renderTestHtml([
+				{
+					sourcePath: "a.md",
+					title: "A",
+					markdown: '<video controls src="assets/clip.mp4">clip.mp4</video>',
+					frontmatter: {},
+				},
+			]);
+
+			expect(html).toContain('<video controls src="assets/clip.mp4">clip.mp4</video>');
+			expect(html).not.toContain("&lt;video");
+		});
 	});
 
 	describe("XSS prevention", () => {

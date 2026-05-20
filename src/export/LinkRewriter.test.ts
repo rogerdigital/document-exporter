@@ -10,6 +10,7 @@ function createMockApp() {
 					Note1: "notes/note1.md",
 					Note2: "notes/note2.md",
 					"image.png": "assets/image.png",
+					"clip.mp4": "assets/clip.mp4",
 				};
 				const p = map[link];
 				return p ? { path: p } : null;
@@ -21,6 +22,7 @@ function createMockApp() {
 					"notes/note1.md",
 					"notes/note2.md",
 					"assets/image.png",
+					"assets/clip.mp4",
 				];
 				return known.includes(path) ? { path } : null;
 			}),
@@ -32,6 +34,7 @@ describe("LinkRewriter", () => {
 	const exportedPaths = new Set(["notes/note1.md", "notes/note2.md"]);
 	const attachments: AttachmentCopy[] = [
 		{ sourcePath: "assets/image.png", outputRelativePath: "attachments/image.png" },
+		{ sourcePath: "assets/clip.mp4", outputRelativePath: "attachments/clip.mp4" },
 	];
 
 	function makeRewriter(profile: ExportProfileId = "markdown-bundle") {
@@ -113,6 +116,18 @@ describe("LinkRewriter", () => {
 			const rewriter = makeRewriter("html-document");
 			const { markdown } = rewriter.rewrite("![[image.png]]", "notes/note1.md");
 			expect(markdown).toBe('<img src="attachments/image.png" alt="image.png" />');
+		});
+
+		it("keeps image embeds as markdown image syntax for docx profile", () => {
+			const rewriter = makeRewriter("docx");
+			const { markdown } = rewriter.rewrite("![[image.png]]", "notes/note1.md");
+			expect(markdown).toBe("![image.png](attachments/image.png)");
+		});
+
+		it("rewrites video embeds as video tags for html-document profile", () => {
+			const rewriter = makeRewriter("html-document");
+			const { markdown } = rewriter.rewrite("![[clip.mp4]]", "notes/note1.md");
+			expect(markdown).toBe('<video controls src="attachments/clip.mp4">clip.mp4</video>');
 		});
 	});
 

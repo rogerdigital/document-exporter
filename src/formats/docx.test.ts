@@ -121,6 +121,92 @@ describe("DOCX rendering", () => {
 		expect(packageText).toContain("image/png");
 	});
 
+	it("embeds rewritten wiki image embeds instead of printing html img text", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				writtenData = data;
+			}),
+		};
+		const pngData = createMinimalPng();
+		const app = {
+			vault: {
+				getAbstractFileByPath: vi.fn((path: string) => {
+					if (path === "assets/image.png") {
+						return { path, extension: "png", name: "image.png" };
+					}
+					return null;
+				}),
+				readBinary: vi.fn(() => Promise.resolve(pngData.buffer)),
+			},
+		};
+		const doc: AssembledDocument = {
+			title: "Image Test",
+			sections: [{
+				title: "Image Test",
+				sourcePath: "note.md",
+				markdown: "![image.png](assets/image.png)",
+				frontmatter: {},
+			}],
+			attachments: [{
+				sourcePath: "assets/image.png",
+				outputRelativePath: "assets/image.png",
+			}],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never, app as never);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		expect(packageText).toContain("w:drawing");
+		expect(packageText).not.toContain("&lt;img");
+		expect(packageText).not.toContain("src=&quot;");
+	});
+
+	it("embeds multiple images by their rewritten attachment paths", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				writtenData = data;
+			}),
+		};
+		const pngData = createMinimalPng();
+		const app = {
+			vault: {
+				getAbstractFileByPath: vi.fn((path: string) => {
+					if (path === "attachments/one.png" || path === "attachments/two.png") {
+						return { path, extension: "png", name: path.split("/").pop() };
+					}
+					return null;
+				}),
+				readBinary: vi.fn(() => Promise.resolve(pngData.buffer)),
+			},
+		};
+		const doc: AssembledDocument = {
+			title: "Image Test",
+			sections: [{
+				title: "Image Test",
+				sourcePath: "note.md",
+				markdown: "![one](attachments/one.png)\n![two](attachments/two.png)",
+				frontmatter: {},
+			}],
+			attachments: [
+				{ sourcePath: "attachments/one.png", outputRelativePath: "attachments/one.png" },
+				{ sourcePath: "attachments/two.png", outputRelativePath: "attachments/two.png" },
+			],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never, app as never);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		expect(packageText.match(/<w:drawing>/g)).toHaveLength(2);
+		expect(packageText).not.toContain("[Image: one]");
+		expect(packageText).not.toContain("[Image: two]");
+	});
+
 	it("falls back to text placeholder when app is null", async () => {
 		let writtenData: Uint8Array | null = null;
 		const writer = {

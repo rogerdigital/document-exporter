@@ -112,7 +112,7 @@ export function rewriteAppProtocolUrls(
 	}
 
 	return html.replace(
-		/src="app:\/\/[^"]*\/([^"/?]+)(?:\?[^"]*)?"]/g,
+		/src="app:\/\/[^"]*\/([^"/?]+)(?:\?[^"]*)?"/g,
 		(match, filename: string) => {
 			const decodedName = decodeURIComponent(filename);
 			const relPath = attachmentMap.get(decodedName);

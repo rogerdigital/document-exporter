@@ -21,7 +21,7 @@ export async function renderPdf(
 	await writer.ensureFolder(plan.outputRoot);
 
 	const toc = doc.sections.length > 1 ? generateToc(doc.sections) : "";
-	const { html: body, warnings: renderWarnings } = await renderSections(doc.sections, app, doc.title);
+	const { html: body, warnings: renderWarnings } = await renderSections(doc.sections, app, doc.title, doc.attachments);
 	warnings.push(...renderWarnings);
 
 	let finalBody = body;
@@ -76,6 +76,7 @@ async function renderSections(
 	sections: DocumentSection[],
 	app: App,
 	docTitle: string,
+	attachments: AssembledDocument["attachments"],
 ): Promise<{ html: string; warnings: string[] }> {
 	const allWarnings: string[] = [];
 	const parts: string[] = [];
@@ -89,7 +90,7 @@ async function renderSections(
 		if (typeof document !== "undefined") {
 			try {
 				const result = await renderMarkdownNative(app, s.markdown, s.sourcePath);
-				sectionHtml = rewriteAppProtocolUrls(result.html, []);
+				sectionHtml = rewriteAppProtocolUrls(result.html, attachments);
 				allWarnings.push(...result.warnings);
 			} catch {
 				sectionHtml = markdownToBasicHtml(s.markdown);

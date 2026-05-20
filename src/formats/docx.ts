@@ -17,6 +17,8 @@ type DocxParagraph = {
 
 type DocxImage = {
 	rId: string;
+	sourcePath: string;
+	outputRelativePath: string;
 	mediaPath: string;
 	data: Uint8Array;
 	width: number;
@@ -96,6 +98,8 @@ async function collectImages(
 
 			images.push({
 				rId: `rId${rIdCounter++}`,
+				sourcePath: att.sourcePath,
+				outputRelativePath: att.outputRelativePath,
 				mediaPath: `word/media/image${images.length + 1}.${ext}`,
 				data,
 				width: dims.width,
@@ -145,6 +149,10 @@ function buildDocxParagraphs(doc: AssembledDocument, images: DocxImage[]): DocxP
 	const imageMap = new Map<string, DocxImage>();
 	for (const img of images) {
 		imageMap.set(img.mediaPath, img);
+		imageMap.set(img.sourcePath, img);
+		imageMap.set(img.outputRelativePath, img);
+		imageMap.set(img.sourcePath.split("/").pop() ?? img.sourcePath, img);
+		imageMap.set(img.outputRelativePath.split("/").pop() ?? img.outputRelativePath, img);
 	}
 
 	const paragraphs: DocxParagraph[] = [

@@ -155,16 +155,56 @@ export class LinkRewriter {
 			return "../".repeat(depth) + attRelativePath;
 		}
 
-		private formatEmbed(relPath: string, link: string): string {
-		if (this.profile === "html-document" || this.profile === "pdf" || this.profile === "docx") {
-			const ext = relPath.split(".").pop()?.toLowerCase() ?? "";
-			if (["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp"].includes(ext)) {
-				return `<img src="${relPath}" alt="${link}" />`;
+	private formatEmbed(relPath: string, link: string): string {
+		const ext = relPath.split(".").pop()?.toLowerCase() ?? "";
+		const safeRelPath = escapeHtmlAttr(relPath);
+		const safeLabel = escapeHtmlText(link);
+
+		if (this.profile === "html-document" || this.profile === "pdf") {
+			if (isImageExtension(ext)) {
+				return `<img src="${safeRelPath}" alt="${escapeHtmlAttr(link)}" />`;
 			}
-			return `<a href="${relPath}">${link}</a>`;
+			if (isVideoExtension(ext)) {
+				return `<video controls src="${safeRelPath}">${safeLabel}</video>`;
+			}
+			if (isAudioExtension(ext)) {
+				return `<audio controls src="${safeRelPath}">${safeLabel}</audio>`;
+			}
+			if (ext === "pdf") {
+				return `<object data="${safeRelPath}" type="application/pdf"><a href="${safeRelPath}">${safeLabel}</a></object>`;
+			}
+			return `<a href="${safeRelPath}">${safeLabel}</a>`;
 		}
+
+		if (this.profile === "docx" && isImageExtension(ext)) {
+			return `![${link}](${relPath})`;
+		}
+
 		return `![](${relPath})`;
 	}
+}
+
+function isImageExtension(ext: string): boolean {
+	return ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp"].includes(ext);
+}
+
+function isVideoExtension(ext: string): boolean {
+	return ["mp4", "webm", "mov", "m4v"].includes(ext);
+}
+
+function isAudioExtension(ext: string): boolean {
+	return ["mp3", "wav", "ogg", "m4a", "flac"].includes(ext);
+}
+
+function escapeHtmlAttr(value: string): string {
+	return escapeHtmlText(value).replace(/"/g, "&quot;");
+}
+
+function escapeHtmlText(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
 }
 
 export function slugify(text: string): string {
