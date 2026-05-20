@@ -71,6 +71,35 @@ describe("DOCX rendering", () => {
 		expect(packageText).toContain("Heading6");
 	});
 
+	it("uses emoji-capable font hints for runs containing emoji", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				writtenData = data;
+			}),
+		};
+		const doc: AssembledDocument = {
+			title: "Emoji Test",
+			sections: [{
+				title: "Emoji Test",
+				sourcePath: "a.md",
+				markdown: "早上好，周六😁\n老婆早起给做了杯咖啡😘",
+				frontmatter: {},
+			}],
+			attachments: [],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		expect(packageText).toContain("😁");
+		expect(packageText).toContain("😘");
+		expect(packageText).toContain('<w:rFonts w:ascii="Apple Color Emoji"');
+		expect(packageText).toContain('w:eastAsia="Apple Color Emoji"');
+	});
+
 	it("includes image drawing elements when attachments are present", async () => {
 		let writtenData: Uint8Array | null = null;
 		const writer = {
@@ -121,6 +150,133 @@ describe("DOCX rendering", () => {
 		expect(packageText).toContain("image/png");
 	});
 
+	it("limits embedded image width for readable document layout", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				writtenData = data;
+			}),
+		};
+		const pngData = createMinimalPng({ width: 2000, height: 1000 });
+		const app = {
+			vault: {
+				getAbstractFileByPath: vi.fn((path: string) => {
+					if (path === "assets/wide.png") {
+						return { path, extension: "png", name: "wide.png" };
+					}
+					return null;
+				}),
+				readBinary: vi.fn(() => Promise.resolve(pngData.buffer)),
+			},
+		};
+		const doc: AssembledDocument = {
+			title: "Image Test",
+			sections: [{
+				title: "Image Test",
+				sourcePath: "note.md",
+				markdown: "![wide](assets/wide.png)",
+				frontmatter: {},
+			}],
+			attachments: [{
+				sourcePath: "assets/wide.png",
+				outputRelativePath: "assets/wide.png",
+			}],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never, app as never);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		expect(packageText).toContain('<wp:extent cx="3657600" cy="1828800"/>');
+	});
+
+	it("embeds rewritten wiki image embeds instead of printing html img text", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				writtenData = data;
+			}),
+		};
+		const pngData = createMinimalPng();
+		const app = {
+			vault: {
+				getAbstractFileByPath: vi.fn((path: string) => {
+					if (path === "assets/image.png") {
+						return { path, extension: "png", name: "image.png" };
+					}
+					return null;
+				}),
+				readBinary: vi.fn(() => Promise.resolve(pngData.buffer)),
+			},
+		};
+		const doc: AssembledDocument = {
+			title: "Image Test",
+			sections: [{
+				title: "Image Test",
+				sourcePath: "note.md",
+				markdown: "![image.png](assets/image.png)",
+				frontmatter: {},
+			}],
+			attachments: [{
+				sourcePath: "assets/image.png",
+				outputRelativePath: "assets/image.png",
+			}],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never, app as never);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		expect(packageText).toContain("w:drawing");
+		expect(packageText).not.toContain("&lt;img");
+		expect(packageText).not.toContain("src=&quot;");
+	});
+
+	it("embeds multiple images by their rewritten attachment paths", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				writtenData = data;
+			}),
+		};
+		const pngData = createMinimalPng();
+		const app = {
+			vault: {
+				getAbstractFileByPath: vi.fn((path: string) => {
+					if (path === "attachments/one.png" || path === "attachments/two.png") {
+						return { path, extension: "png", name: path.split("/").pop() };
+					}
+					return null;
+				}),
+				readBinary: vi.fn(() => Promise.resolve(pngData.buffer)),
+			},
+		};
+		const doc: AssembledDocument = {
+			title: "Image Test",
+			sections: [{
+				title: "Image Test",
+				sourcePath: "note.md",
+				markdown: "![one](attachments/one.png)\n![two](attachments/two.png)",
+				frontmatter: {},
+			}],
+			attachments: [
+				{ sourcePath: "attachments/one.png", outputRelativePath: "attachments/one.png" },
+				{ sourcePath: "attachments/two.png", outputRelativePath: "attachments/two.png" },
+			],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never, app as never);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		expect(packageText.match(/<w:drawing>/g)).toHaveLength(2);
+		expect(packageText).not.toContain("[Image: one]");
+		expect(packageText).not.toContain("[Image: two]");
+	});
+
 	it("falls back to text placeholder when app is null", async () => {
 		let writtenData: Uint8Array | null = null;
 		const writer = {
@@ -151,15 +307,15 @@ describe("DOCX rendering", () => {
 	});
 });
 
-function createMinimalPng(): Uint8Array {
+function createMinimalPng(dimensions: { width: number; height: number } = { width: 1, height: 1 }): Uint8Array {
 	// Minimal valid 1x1 white PNG
 	const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
 	// IHDR chunk: 1x1 8-bit RGB
 	const ihdrData = new Uint8Array(13);
 	const ihdrView = new DataView(ihdrData.buffer);
-	ihdrView.setUint32(0, 1, false); // width
-	ihdrView.setUint32(4, 1, false); // height
+	ihdrView.setUint32(0, dimensions.width, false); // width
+	ihdrView.setUint32(4, dimensions.height, false); // height
 	ihdrData[8] = 8; // bit depth
 	ihdrData[9] = 2; // color type (RGB)
 	ihdrData[10] = 0; // compression

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { ExportRunner, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
 
+vi.mock("@/formats/pdf", () => ({
+	renderPdf: vi.fn(() => Promise.reject(new Error("PDF generation failed: test failure"))),
+}));
+
 function createFile(path: string) {
 	return { path, basename: path.split("/").pop()?.replace(/\.md$/, "") ?? path, extension: "md" };
 }
@@ -45,6 +49,14 @@ function makePlan(files: string[]) {
 		outputFolderName: undefined,
 		outputFiles: files.map((f) => `exports/${f.split("/").pop()}`),
 		attachmentCopies: [],
+	};
+}
+
+function makePdfPlan(files: string[]) {
+	return {
+		...makePlan(files),
+		profile: "pdf" as const,
+		outputFiles: files.map((f) => `exports/${f.split("/").pop()?.replace(/\\.md$/, ".pdf")}`),
 	};
 }
 
@@ -126,6 +138,23 @@ describe("ExportRunner", () => {
 			const result = await runner.run(plan, defaultSettings(), callbacks);
 			expect(result.success).toBe(false);
 			expect(result.warnings[0]).toContain("cancelled");
+		});
+	});
+
+	describe("format failures", () => {
+		it("marks PDF export as failed when the PDF file was not produced", async () => {
+			const app = createMockApp(["a.md"]);
+			const plan = makePdfPlan(["a.md"]);
+			const runner = new ExportRunner(app as never);
+
+			const result = await runner.run(plan, defaultSettings(), {
+				onFileStart: vi.fn(),
+				onFileComplete: vi.fn(),
+				onPhase: vi.fn(),
+			});
+
+			expect(result.success).toBe(false);
+			expect(result.warnings[0]).toContain("PDF generation failed");
 		});
 	});
 });

@@ -18,8 +18,8 @@ export class OutputWriter {
 
 	async ensureFolder(folderPath: string): Promise<void> {
 		if (this.isExternal(folderPath)) {
-			if (!nodeFs) return;
-			nodeFs.mkdirSync(folderPath, { recursive: true });
+			const fs = this.getExternalFs();
+			fs.mkdirSync(folderPath, { recursive: true });
 			return;
 		}
 
@@ -36,8 +36,8 @@ export class OutputWriter {
 
 	async writeText(filePath: string, content: string): Promise<void> {
 		if (this.isExternal(filePath)) {
-			if (!nodeFs) return;
-			nodeFs.writeFileSync(filePath, content, "utf-8");
+			const fs = this.getExternalFs();
+			fs.writeFileSync(filePath, content, "utf-8");
 			return;
 		}
 
@@ -51,8 +51,8 @@ export class OutputWriter {
 
 	async writeBinary(filePath: string, data: ArrayBuffer | Uint8Array): Promise<void> {
 		if (this.isExternal(filePath)) {
-			if (!nodeFs) return;
-			nodeFs.writeFileSync(filePath, data instanceof Uint8Array ? data : new Uint8Array(data));
+			const fs = this.getExternalFs();
+			fs.writeFileSync(filePath, data instanceof Uint8Array ? data : new Uint8Array(data));
 			return;
 		}
 
@@ -72,8 +72,8 @@ export class OutputWriter {
 		const content = await this.app.vault.readBinary(sourceFile);
 
 		if (this.isExternal(destPath)) {
-			if (!nodeFs) return;
-			nodeFs.writeFileSync(destPath, new Uint8Array(content));
+			const fs = this.getExternalFs();
+			fs.writeFileSync(destPath, new Uint8Array(content));
 		} else {
 			const existing = this.app.vault.getAbstractFileByPath(destPath);
 			if (existing instanceof TFile) {
@@ -111,6 +111,13 @@ export class OutputWriter {
 		if (p.startsWith("/")) return true;
 		if (/^[A-Za-z]:/.test(p)) return true;
 		return false;
+	}
+
+	private getExternalFs(): typeof import("fs") {
+		if (!nodeFs) {
+			throw new Error("External file system access is not available");
+		}
+		return nodeFs;
 	}
 }
 

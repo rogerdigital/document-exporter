@@ -21,7 +21,7 @@ export async function renderPdf(
 	await writer.ensureFolder(plan.outputRoot);
 
 	const toc = doc.sections.length > 1 ? generateToc(doc.sections) : "";
-	const { html: body, warnings: renderWarnings } = await renderSections(doc.sections, app, doc.title);
+	const { html: body, warnings: renderWarnings } = await renderSections(doc.sections, app, doc.title, doc.attachments);
 	warnings.push(...renderWarnings);
 
 	let finalBody = body;
@@ -48,18 +48,13 @@ export async function renderPdf(
 
 	const htmlBody = `<h1>${escapeHtml(doc.title)}</h1>\n${toc}\n${finalBody}`;
 
-	try {
-		const pdfBuffer = await printViaBrowserWindow(htmlBody, cssText + "\n" + printCss);
-		if (pdfBuffer.byteLength < MIN_VALID_PDF_BYTES) {
-			throw new Error("generated PDF is unexpectedly small; the print page may be blank");
-		}
-		const resolved = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "")}.pdf`;
-		await writer.ensureFolder(resolved.substring(0, resolved.lastIndexOf("/")));
-		await writer.writeBinary(resolved, pdfBuffer);
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
-		warnings.push(`PDF generation failed: ${msg}`);
+	const pdfBuffer = await printViaBrowserWindow(htmlBody, cssText + "\n" + printCss);
+	if (pdfBuffer.byteLength < MIN_VALID_PDF_BYTES) {
+		throw new Error("PDF generation failed: generated PDF is unexpectedly small; the print page may be blank");
 	}
+	const resolved = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "")}.pdf`;
+	await writer.ensureFolder(resolved.substring(0, resolved.lastIndexOf("/")));
+	await writer.writeBinary(resolved, pdfBuffer);
 
 	return warnings;
 }
@@ -76,6 +71,7 @@ async function renderSections(
 	sections: DocumentSection[],
 	app: App,
 	docTitle: string,
+	attachments: AssembledDocument["attachments"],
 ): Promise<{ html: string; warnings: string[] }> {
 	const allWarnings: string[] = [];
 	const parts: string[] = [];
@@ -89,7 +85,7 @@ async function renderSections(
 		if (typeof document !== "undefined") {
 			try {
 				const result = await renderMarkdownNative(app, s.markdown, s.sourcePath);
-				sectionHtml = rewriteAppProtocolUrls(result.html, []);
+				sectionHtml = rewriteAppProtocolUrls(result.html, attachments);
 				allWarnings.push(...result.warnings);
 			} catch {
 				sectionHtml = markdownToBasicHtml(s.markdown);
@@ -125,7 +121,6 @@ interface PdfWebContents {
 
 interface PdfBrowserWindow {
 	loadURL: (url: string) => Promise<void>;
-	showInactive?: () => void;
 	close: () => void;
 	webContents: PdfWebContents;
 }
@@ -166,27 +161,13 @@ ${PDF_PAGE_RESET_CSS}</style></head>
 <body><main class="pdf-export-page markdown-rendered">${htmlBody}</main></body></html>`;
 }
 
-async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uint8Array> {
-	if (!Platform.isDesktop) {
-		throw new Error("PDF export requires the desktop app.");
-	}
+export function buildPdfDocumentWriteScript(html: string): string {
+	return `document.open(); document.write(${JSON.stringify(html)}); document.close();`;
+}
 
-	const fullHtml = buildPdfHtml(htmlBody, css);
-	const printUrl = `data:text/html;charset=utf-8,${encodeURIComponent(fullHtml)}`;
-
-	const electron = getElectronModule();
-	const remote = electron.remote;
-	if (!remote) {
-		throw new Error("electron.remote not available - cannot create BrowserWindow");
-	}
-
-	const BrowserWindow = remote.BrowserWindow;
-	if (!BrowserWindow) {
-		throw new Error("BrowserWindow not found on electron.remote");
-	}
-
-	const win = new BrowserWindow({
-		show: true,
+export function createPdfBrowserWindowOptions(): ConstructorParameters<PdfBrowserWindowConstructor>[0] {
+	return {
+		show: false,
 		frame: false,
 		skipTaskbar: true,
 		focusable: false,
@@ -199,14 +180,32 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uin
 			contextIsolation: false,
 			nodeIntegration: false,
 		},
-	});
+	};
+}
+
+async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uint8Array> {
+	if (!Platform.isDesktop) {
+		throw new Error("PDF export requires the desktop app.");
+	}
+
+	const fullHtml = buildPdfHtml(htmlBody, css);
+
+	const electron = getElectronModule();
+	const remote = electron.remote;
+	if (!remote) {
+		throw new Error("electron.remote not available - cannot create BrowserWindow");
+	}
+
+	const BrowserWindow = remote.BrowserWindow;
+	if (!BrowserWindow) {
+		throw new Error("BrowserWindow not found on electron.remote");
+	}
+
+	const win = new BrowserWindow(createPdfBrowserWindowOptions());
 
 	try {
-		await win.loadURL(printUrl);
-		if (typeof win.showInactive === "function") {
-			win.showInactive();
-		}
-
+		await win.loadURL("about:blank");
+		await win.webContents.executeJavaScript(buildPdfDocumentWriteScript(fullHtml));
 		await waitForPrintableContent(win);
 
 		const pdfData = await win.webContents.printToPDF({
@@ -328,6 +327,14 @@ body,
 	max-width: 800px;
 	margin: 0 auto;
 	padding: 1.35cm 1.6cm;
+}
+
+.pdf-export-page img {
+	display: block;
+	max-width: min(100%, 384px);
+	height: auto;
+	margin: 1rem 0;
+	page-break-inside: avoid;
 }
 `;
 

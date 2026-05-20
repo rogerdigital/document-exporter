@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { buildHtmlDoc } from "@/formats/html-document";
 
 describe("HTML Document rendering", () => {
 	describe("TOC generation", () => {
@@ -50,6 +51,41 @@ describe("HTML Document rendering", () => {
 			await invokeRenderHtml(doc, plan, writer);
 
 			expect(writtenFiles).toContain("exports/assets");
+		});
+
+		it("renders safe embedded video tags without escaping them", async () => {
+			const { html } = await renderTestHtml([
+				{
+					sourcePath: "a.md",
+					title: "A",
+					markdown: '<video controls src="assets/clip.mp4">clip.mp4</video>',
+					frontmatter: {},
+				},
+			]);
+
+			expect(html).toContain('<video controls src="assets/clip.mp4">clip.mp4</video>');
+			expect(html).not.toContain("&lt;video");
+		});
+
+		it("adds readable default media sizing rules", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "A", markdown: "![alt](assets/image.png)", frontmatter: {} },
+			]);
+
+			expect(html).toContain("img, video, object");
+			expect(html).toContain("max-width: min(100%, 560px)");
+			expect(html).toContain("display: block");
+			expect(html).toContain("margin: 1rem auto");
+		});
+
+		it("keeps exported pages scrollable when custom app styles are included", () => {
+			const html = buildHtmlDoc("Test", "", "<p>Body</p>", "html, body { height: 100%; overflow: hidden; }");
+
+			expect(html).toContain("<body>");
+			expect(html).toContain('<main class="markdown-rendered">');
+			expect(html).not.toContain("app-container");
+			expect(html).toContain("html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; contain: none !important; overscroll-behavior: auto !important; }");
+			expect(html).toContain("<p>Body</p>");
 		});
 	});
 

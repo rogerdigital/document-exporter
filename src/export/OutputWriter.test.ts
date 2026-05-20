@@ -87,6 +87,16 @@ describe("OutputWriter", () => {
 		});
 	});
 
+	describe("writeBinary", () => {
+		it("throws instead of silently succeeding when external fs access is unavailable", async () => {
+			const app = createMockApp();
+			const writer = new OutputWriter(app as never);
+
+			await expect(writer.writeBinary("/tmp/export.pdf", new Uint8Array([1, 2, 3])))
+				.rejects.toThrow("External file system access is not available");
+		});
+	});
+
 	describe("copyBinaryFile", () => {
 		it("copies binary within vault using vault API", async () => {
 			const buf = new ArrayBuffer(8);
