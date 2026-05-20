@@ -121,6 +121,47 @@ describe("DOCX rendering", () => {
 		expect(packageText).toContain("image/png");
 	});
 
+	it("limits embedded image width for readable document layout", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				writtenData = data;
+			}),
+		};
+		const pngData = createMinimalPng({ width: 2000, height: 1000 });
+		const app = {
+			vault: {
+				getAbstractFileByPath: vi.fn((path: string) => {
+					if (path === "assets/wide.png") {
+						return { path, extension: "png", name: "wide.png" };
+					}
+					return null;
+				}),
+				readBinary: vi.fn(() => Promise.resolve(pngData.buffer)),
+			},
+		};
+		const doc: AssembledDocument = {
+			title: "Image Test",
+			sections: [{
+				title: "Image Test",
+				sourcePath: "note.md",
+				markdown: "![wide](assets/wide.png)",
+				frontmatter: {},
+			}],
+			attachments: [{
+				sourcePath: "assets/wide.png",
+				outputRelativePath: "assets/wide.png",
+			}],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never, app as never);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		expect(packageText).toContain('<wp:extent cx="3657600" cy="1828800"/>');
+	});
+
 	it("embeds rewritten wiki image embeds instead of printing html img text", async () => {
 		let writtenData: Uint8Array | null = null;
 		const writer = {
@@ -237,15 +278,15 @@ describe("DOCX rendering", () => {
 	});
 });
 
-function createMinimalPng(): Uint8Array {
+function createMinimalPng(dimensions: { width: number; height: number } = { width: 1, height: 1 }): Uint8Array {
 	// Minimal valid 1x1 white PNG
 	const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
 	// IHDR chunk: 1x1 8-bit RGB
 	const ihdrData = new Uint8Array(13);
 	const ihdrView = new DataView(ihdrData.buffer);
-	ihdrView.setUint32(0, 1, false); // width
-	ihdrView.setUint32(4, 1, false); // height
+	ihdrView.setUint32(0, dimensions.width, false); // width
+	ihdrView.setUint32(4, dimensions.height, false); // height
 	ihdrData[8] = 8; // bit depth
 	ihdrData[9] = 2; // color type (RGB)
 	ihdrData[10] = 0; // compression

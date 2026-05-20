@@ -215,7 +215,7 @@ h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; }
 section { margin-top: 2em; }
 pre { background: #f5f5f5; padding: 1em; overflow-x: auto; border-radius: 4px; }
 code { background: #f5f5f5; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
-img, video, object { max-width: 100%; height: auto; }
+img, video, object { display: block; max-width: min(100%, 560px); height: auto; margin: 1rem auto; }
 audio { width: 100%; }
 a { color: #0366d6; }
 .toc { background: #f8f9fa; padding: 1em 1.5em; border-radius: 4px; margin-bottom: 2em; }

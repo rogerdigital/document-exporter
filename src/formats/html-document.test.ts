@@ -65,6 +65,17 @@ describe("HTML Document rendering", () => {
 			expect(html).toContain('<video controls src="assets/clip.mp4">clip.mp4</video>');
 			expect(html).not.toContain("&lt;video");
 		});
+
+		it("adds readable default media sizing rules", async () => {
+			const { html } = await renderTestHtml([
+				{ sourcePath: "a.md", title: "A", markdown: "![alt](assets/image.png)", frontmatter: {} },
+			]);
+
+			expect(html).toContain("img, video, object");
+			expect(html).toContain("max-width: min(100%, 560px)");
+			expect(html).toContain("display: block");
+			expect(html).toContain("margin: 1rem auto");
+		});
 	});
 
 	describe("XSS prevention", () => {

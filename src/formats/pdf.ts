@@ -161,6 +161,10 @@ ${PDF_PAGE_RESET_CSS}</style></head>
 <body><main class="pdf-export-page markdown-rendered">${htmlBody}</main></body></html>`;
 }
 
+export function buildPdfDocumentWriteScript(html: string): string {
+	return `document.open(); document.write(${JSON.stringify(html)}); document.close();`;
+}
+
 export function createPdfBrowserWindowOptions(): ConstructorParameters<PdfBrowserWindowConstructor>[0] {
 	return {
 		show: false,
@@ -185,7 +189,6 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uin
 	}
 
 	const fullHtml = buildPdfHtml(htmlBody, css);
-	const printUrl = `data:text/html;charset=utf-8,${encodeURIComponent(fullHtml)}`;
 
 	const electron = getElectronModule();
 	const remote = electron.remote;
@@ -201,7 +204,8 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uin
 	const win = new BrowserWindow(createPdfBrowserWindowOptions());
 
 	try {
-		await win.loadURL(printUrl);
+		await win.loadURL("about:blank");
+		await win.webContents.executeJavaScript(buildPdfDocumentWriteScript(fullHtml));
 		await waitForPrintableContent(win);
 
 		const pdfData = await win.webContents.printToPDF({
@@ -323,6 +327,14 @@ body,
 	max-width: 800px;
 	margin: 0 auto;
 	padding: 1.35cm 1.6cm;
+}
+
+.pdf-export-page img {
+	display: block;
+	max-width: min(100%, 420px);
+	height: auto;
+	margin: 1rem auto;
+	page-break-inside: avoid;
 }
 `;
 

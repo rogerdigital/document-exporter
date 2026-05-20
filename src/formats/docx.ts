@@ -36,7 +36,7 @@ type ZipEntry = {
 const encoder = new TextEncoder();
 const CRC32_TABLE = buildCrc32Table();
 const PX_TO_EMU = 9525;
-const MAX_WIDTH_EMU = 5486400;
+const MAX_WIDTH_EMU = 3657600;
 
 export async function renderDocx(
 	doc: AssembledDocument,
