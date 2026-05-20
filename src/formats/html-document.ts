@@ -7,7 +7,6 @@ export async function renderHtmlDocument(
 	doc: AssembledDocument,
 	plan: ExportPlan,
 	writer: OutputWriter,
-	printReady = false,
 	app: App | null = null,
 	outputFilePath?: string,
 ): Promise<string[]> {
@@ -23,7 +22,7 @@ export async function renderHtmlDocument(
 	warnings.push(...renderWarnings);
 
 	const customCss = app ? extractObsidianStyles() : null;
-	const html = buildHtmlDoc(doc.title, toc, body, printReady, customCss);
+	const html = buildHtmlDoc(doc.title, toc, body, customCss);
 
 	const resolvedOutput = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm)$/i, '')}.html`;
 	await writer.ensureFolder(resolvedOutput.substring(0, resolvedOutput.lastIndexOf("/")));
@@ -203,27 +202,8 @@ export function buildHtmlDoc(
 	title: string,
 	toc: string,
 	body: string,
-	printReady: boolean,
 	customCss: string | null = null,
 ): string {
-	const printCss = printReady
-		? `
-	@media print {
-		body { max-width: 100%; margin: 0; padding: 2cm; }
-		section { page-break-before: auto; }
-		section:first-of-type { page-break-before: avoid; }
-		h2 { page-break-after: avoid; }
-		img { max-width: 100%; page-break-inside: avoid; }
-		.toc { page-break-after: always; }
-	}
-	.title-page { text-align: center; padding: 30vh 0; page-break-after: always; }
-	`
-		: "";
-
-	const titlePage = printReady
-		? `<div class="title-page"><h1>${escapeHtml(title)}</h1></div>`
-		: "";
-
 	const css = customCss ?? DEFAULT_CSS;
 	const bodyClass = customCss ? "app-container markdown-rendered" : "";
 
@@ -235,13 +215,11 @@ export function buildHtmlDoc(
 <title>${escapeHtml(title)}</title>
 <style>
 ${css}
-${printCss}
 ${customCss ? `body { padding: 2rem; max-width: 800px; margin: 0 auto; }` : ""}
 </style>
 </head>
 <body class="${bodyClass}">
 <h1>${escapeHtml(title)}</h1>
-${titlePage}
 ${toc}
 ${body}
 </body>

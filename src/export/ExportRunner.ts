@@ -106,7 +106,7 @@ export class ExportRunner {
 			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
 			const file = files[i];
-			const outputFilePath = plan.outputFiles[i];
+			const outputFilePath = outputPathMap.get(file.path) ?? plan.outputFiles[i];
 
 			callbacks?.onFileStart(i, files.length, file.basename);
 
@@ -157,7 +157,7 @@ export class ExportRunner {
 					formatWarnings = await renderMarkdownBundle(doc, effectivePlan, writer, outputFilePath);
 					break;
 				case "html-document":
-					formatWarnings = await renderHtmlDocument(doc, effectivePlan, writer, false, this.app, outputFilePath);
+					formatWarnings = await renderHtmlDocument(doc, effectivePlan, writer, this.app, outputFilePath);
 					break;
 				case "pdf":
 					formatWarnings = await renderPdf(doc, effectivePlan, writer, this.app, outputFilePath);

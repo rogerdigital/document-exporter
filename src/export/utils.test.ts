@@ -4,6 +4,7 @@ import {
 	containsTraversal,
 	extractCodeBlocks,
 	restoreCodeBlocks,
+	longestCommonDirPrefix,
 } from "./utils";
 
 describe("normalizePath", () => {
@@ -82,5 +83,31 @@ describe("extractCodeBlocks / restoreCodeBlocks", () => {
 		const { text, blocks } = extractCodeBlocks(md);
 		expect(text).toBe(md);
 		expect(blocks.length).toBe(0);
+	});
+});
+
+describe("longestCommonDirPrefix", () => {
+	it("returns empty string for empty array", () => {
+		expect(longestCommonDirPrefix([])).toBe("");
+	});
+
+	it("returns directory for single path", () => {
+		expect(longestCommonDirPrefix(["dir/file.md"])).toBe("dir/");
+	});
+
+	it("returns common directory for multiple paths", () => {
+		expect(longestCommonDirPrefix(["dir/a.md", "dir/b.md"])).toBe("dir/");
+	});
+
+	it("returns empty string when no common directory", () => {
+		expect(longestCommonDirPrefix(["a/file.md", "b/file.md"])).toBe("");
+	});
+
+	it("handles nested common directories", () => {
+		expect(longestCommonDirPrefix(["a/b/c.md", "a/b/d.md"])).toBe("a/b/");
+	});
+
+	it("returns empty string when all paths are in root", () => {
+		expect(longestCommonDirPrefix(["a.md", "b.md"])).toBe("");
 	});
 });

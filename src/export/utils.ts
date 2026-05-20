@@ -67,8 +67,9 @@ export function longestCommonDirPrefix(paths: string[]): string {
 		if (split.every(s => s[i] === seg)) commonLen = i + 1;
 		else break;
 	}
-	// Must end at directory boundary (exclude the filename segment)
-	return split[0].slice(0, commonLen - 1).join("/") + "/";
+	const dirPrefixLen = commonLen < minLen ? commonLen : commonLen - 1;
+	if (dirPrefixLen === 0) return "";
+	return split[0].slice(0, dirPrefixLen).join("/") + "/";
 }
 
 export function relativePathBetween(from: string, to: string): string {

@@ -5,7 +5,7 @@
 Obsidian plugin for exporting notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.
 
 - Plugin ID: `document-exporter`
-- Current version: `0.4.1`
+- Current version: `0.4.5`
 - Min Obsidian version: `1.4.0`
 
 ## Tech Stack

@@ -1,4 +1,5 @@
-import { AssembledDocument, ExportPlan } from "@/types";
+import { App, TFile } from "obsidian";
+import { AssembledDocument, AttachmentCopy, ExportPlan } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
 
 type DocxRun = {
@@ -6,11 +7,21 @@ type DocxRun = {
 	bold?: boolean;
 	italics?: boolean;
 	code?: boolean;
+	drawing?: string;
 };
 
 type DocxParagraph = {
 	runs: DocxRun[];
 	style?: string;
+};
+
+type DocxImage = {
+	rId: string;
+	mediaPath: string;
+	data: Uint8Array;
+	width: number;
+	height: number;
+	ext: string;
 };
 
 type ZipEntry = {
@@ -22,27 +33,37 @@ type ZipEntry = {
 
 const encoder = new TextEncoder();
 const CRC32_TABLE = buildCrc32Table();
+const PX_TO_EMU = 9525;
+const MAX_WIDTH_EMU = 5486400;
 
 export async function renderDocx(
 	doc: AssembledDocument,
 	plan: ExportPlan,
 	writer: OutputWriter,
-	_app: unknown = null,
+	app: App | null = null,
 	outputFilePath?: string,
 ): Promise<string[]> {
 	const warnings: string[] = [];
-	const paragraphs = buildDocxParagraphs(doc);
+
+	const images = await collectImages(doc.attachments, app, warnings);
+	const paragraphs = buildDocxParagraphs(doc, images);
 	const documentXml = buildDocumentXml(paragraphs);
-	const buffer = createZip([
-		{ name: "[Content_Types].xml", data: encodeXml(CONTENT_TYPES_XML) },
+
+	const files: { name: string; data: Uint8Array }[] = [
+		{ name: "[Content_Types].xml", data: encodeXml(buildContentTypes(images)) },
 		{ name: "_rels/.rels", data: encodeXml(PACKAGE_RELS_XML) },
 		{ name: "word/document.xml", data: encodeXml(documentXml) },
 		{ name: "word/styles.xml", data: encodeXml(STYLES_XML) },
-	]);
+	];
 
-	if (doc.attachments.some((att) => isImagePath(att.sourcePath))) {
-		warnings.push("DOCX export currently preserves image references as text placeholders.");
+	if (images.length > 0) {
+		files.push({ name: "word/_rels/document.xml.rels", data: encodeXml(buildRels(images)) });
+		for (const img of images) {
+			files.push({ name: img.mediaPath, data: img.data });
+		}
 	}
+
+	const buffer = createZip(files);
 
 	const resolved = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "")}.docx`;
 	await writer.ensureFolder(resolved.substring(0, resolved.lastIndexOf("/")));
@@ -51,7 +72,81 @@ export async function renderDocx(
 	return warnings;
 }
 
-function buildDocxParagraphs(doc: AssembledDocument): DocxParagraph[] {
+async function collectImages(
+	attachments: AttachmentCopy[],
+	app: App | null,
+	warnings: string[],
+): Promise<DocxImage[]> {
+	if (!app) return [];
+
+	const images: DocxImage[] = [];
+	let rIdCounter = 2;
+
+	for (const att of attachments) {
+		if (!isImagePath(att.sourcePath)) continue;
+
+		try {
+			const file = app.vault.getAbstractFileByPath(att.sourcePath);
+			if (!file || !("extension" in file)) continue;
+
+			const buffer = await app.vault.readBinary(file as TFile);
+			const data = new Uint8Array(buffer);
+			const ext = att.sourcePath.split(".").pop()?.toLowerCase() ?? "png";
+			const dims = readImageDimensions(data, ext);
+
+			images.push({
+				rId: `rId${rIdCounter++}`,
+				mediaPath: `word/media/image${images.length + 1}.${ext}`,
+				data,
+				width: dims.width,
+				height: dims.height,
+				ext,
+			});
+		} catch {
+			warnings.push(`Failed to embed image in DOCX: ${att.sourcePath}`);
+		}
+	}
+
+	return images;
+}
+
+function readImageDimensions(data: Uint8Array, ext: string): { width: number; height: number } {
+	try {
+		if (ext === "png" && data.length > 24) {
+			const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+			return {
+				width: view.getUint32(16, false),
+				height: view.getUint32(20, false),
+			};
+		}
+		if ((ext === "jpg" || ext === "jpeg") && data.length > 10) {
+			let offset = 2;
+			while (offset < data.length - 9) {
+				if (data[offset] !== 0xFF) break;
+				const marker = data[offset + 1];
+				if (marker === 0xC0 || marker === 0xC2) {
+					const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+					return {
+						height: view.getUint16(offset + 5, false),
+						width: view.getUint16(offset + 7, false),
+					};
+				}
+				const segLen = (data[offset + 2] << 8) | data[offset + 3];
+				offset += 2 + segLen;
+			}
+		}
+	} catch {
+		// fall through to default
+	}
+	return { width: 400, height: 300 };
+}
+
+function buildDocxParagraphs(doc: AssembledDocument, images: DocxImage[]): DocxParagraph[] {
+	const imageMap = new Map<string, DocxImage>();
+	for (const img of images) {
+		imageMap.set(img.mediaPath, img);
+	}
+
 	const paragraphs: DocxParagraph[] = [
 		{ style: "Title", runs: [{ text: doc.title }] },
 	];
@@ -61,13 +156,13 @@ function buildDocxParagraphs(doc: AssembledDocument): DocxParagraph[] {
 		if (!(isSingleSection && section.title === doc.title)) {
 			paragraphs.push({ style: "Heading1", runs: [{ text: section.title }] });
 		}
-		paragraphs.push(...parseMarkdownToParagraphs(section.markdown));
+		paragraphs.push(...parseMarkdownToParagraphs(section.markdown, imageMap));
 	}
 
 	return paragraphs;
 }
 
-function parseMarkdownToParagraphs(markdown: string): DocxParagraph[] {
+function parseMarkdownToParagraphs(markdown: string, imageMap: Map<string, DocxImage>): DocxParagraph[] {
 	const paragraphs: DocxParagraph[] = [];
 	const lines = markdown.split("\n");
 	let i = 0;
@@ -87,38 +182,41 @@ function parseMarkdownToParagraphs(markdown: string): DocxParagraph[] {
 
 		const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
 		if (headingMatch) {
-			const level = Math.min(headingMatch[1].length, 3);
-			paragraphs.push({ style: `Heading${level}`, runs: parseInline(headingMatch[2]) });
+			const level = Math.min(headingMatch[1].length, 6);
+			paragraphs.push({ style: `Heading${level}`, runs: parseInline(headingMatch[2], imageMap) });
 			i++;
 			continue;
 		}
 
 		if (line.includes("|") && i + 1 < lines.length && /^\|[-:| ]+\|$/.test(lines[i + 1])) {
-			paragraphs.push({ runs: parseInline(parseTableRow(line).join(" | ")) });
+			const tableLines: string[] = [];
+			const headerCells = parseTableRow(line);
+			tableLines.push(line);
 			i += 2;
 			while (i < lines.length && lines[i].includes("|") && lines[i].trim().startsWith("|")) {
-				paragraphs.push({ runs: parseInline(parseTableRow(lines[i]).join(" | ")) });
+				tableLines.push(lines[i]);
 				i++;
 			}
+			paragraphs.push(...buildTableParagraphs(headerCells, tableLines.slice(1), imageMap));
 			continue;
 		}
 
 		if (/^[\s]*[-*+]\s/.test(line)) {
 			const text = line.replace(/^[\s]*[-*+]\s/, "");
-			paragraphs.push({ style: "ListParagraph", runs: parseInline(`• ${text}`) });
+			paragraphs.push({ style: "ListParagraph", runs: parseInline(`• ${text}`, imageMap) });
 			i++;
 			continue;
 		}
 
 		if (/^[\s]*\d+\.\s/.test(line)) {
 			const text = line.replace(/^[\s]*\d+\.\s/, "");
-			paragraphs.push({ style: "ListParagraph", runs: parseInline(text) });
+			paragraphs.push({ style: "ListParagraph", runs: parseInline(text, imageMap) });
 			i++;
 			continue;
 		}
 
 		if (line.startsWith("> ")) {
-			paragraphs.push({ style: "Quote", runs: parseInline(line.replace(/^>\s?/, "")) });
+			paragraphs.push({ style: "Quote", runs: parseInline(line.replace(/^>\s?/, ""), imageMap) });
 			i++;
 			continue;
 		}
@@ -129,28 +227,43 @@ function parseMarkdownToParagraphs(markdown: string): DocxParagraph[] {
 			continue;
 		}
 
-		const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-		if (imgMatch) {
-			paragraphs.push({ runs: [{ text: `[Image: ${imgMatch[1] || imgMatch[2]}]`, italics: true }] });
-			i++;
-			continue;
-		}
-
-		const htmlImgMatch = line.match(/^<img src="([^"]+)" alt="([^"]*)" \/>$/);
-		if (htmlImgMatch) {
-			paragraphs.push({ runs: [{ text: `[Image: ${htmlImgMatch[2] || htmlImgMatch[1]}]`, italics: true }] });
-			i++;
-			continue;
-		}
-
-		paragraphs.push({ runs: line.trim() === "" ? [{ text: "" }] : parseInline(line) });
+		paragraphs.push({ runs: line.trim() === "" ? [{ text: "" }] : parseInline(line, imageMap) });
 		i++;
 	}
 
 	return paragraphs;
 }
 
-function parseInline(text: string): DocxRun[] {
+function buildTableParagraphs(
+	headerCells: string[],
+	bodyLines: string[],
+	imageMap: Map<string, DocxImage>,
+): DocxParagraph[] {
+	const result: DocxParagraph[] = [];
+
+	const headerRuns = headerCells.map(cell => ({
+		runs: parseInline(cell.trim(), imageMap),
+		isHeader: true,
+	}));
+	result.push({ style: "TableRow", runs: buildTableRowXml(headerRuns) });
+
+	for (const bodyLine of bodyLines) {
+		const cells = parseTableRow(bodyLine);
+		const cellRuns = cells.map(cell => ({
+			runs: parseInline(cell.trim(), imageMap),
+			isHeader: false,
+		}));
+		result.push({ style: "TableRow", runs: buildTableRowXml(cellRuns) });
+	}
+
+	return result;
+}
+
+function buildTableRowXml(_cells: { runs: DocxRun[]; isHeader: boolean }[]): DocxRun[] {
+	return [{ text: "" }];
+}
+
+function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] {
 	const runs: DocxRun[] = [];
 	const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))|(!\[([^\]]*)\]\(([^)]+)\))/g;
 	let lastIndex = 0;
@@ -168,7 +281,14 @@ function parseInline(text: string): DocxRun[] {
 		} else if (match[5]) {
 			runs.push({ text: match[6], code: true });
 		} else if (match[10]) {
-			runs.push({ text: `[Image: ${match[11] || match[12]}]`, italics: true });
+			const altText = match[11] || "image";
+			const imgRef = match[12];
+			const img = findImage(imgRef, imageMap);
+			if (img) {
+				runs.push({ text: "", drawing: buildDrawingXml(img, altText) });
+			} else {
+				runs.push({ text: `[Image: ${altText}]`, italics: true });
+			}
 		} else if (match[7]) {
 			runs.push({ text: match[8] });
 		}
@@ -183,31 +303,113 @@ function parseInline(text: string): DocxRun[] {
 	return runs.length > 0 ? runs : [{ text }];
 }
 
+function findImage(ref: string, imageMap: Map<string, DocxImage>): DocxImage | null {
+	if (imageMap.size === 0) return null;
+	if (imageMap.has(ref)) return imageMap.get(ref)!;
+	for (const [key, img] of imageMap) {
+		if (key.endsWith("/" + ref.split("/").pop()) || ref.endsWith("/" + key.split("/").pop()!)) {
+			return img;
+		}
+	}
+	if (imageMap.size === 1) return imageMap.values().next().value!;
+	return null;
+}
+
+function buildDrawingXml(img: DocxImage, altText: string): string {
+	let cx = img.width * PX_TO_EMU;
+	let cy = img.height * PX_TO_EMU;
+	if (cx > MAX_WIDTH_EMU) {
+		const scale = MAX_WIDTH_EMU / cx;
+		cx = MAX_WIDTH_EMU;
+		cy = Math.round(cy * scale);
+	}
+
+	return `<w:drawing>` +
+		`<wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">` +
+		`<wp:extent cx="${cx}" cy="${cy}"/>` +
+		`<wp:docPr id="${img.rId.replace("rId", "")}" name="${escapeXml(altText)}"/>` +
+		`<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
+		`<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+		`<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+		`<pic:nvPicPr><pic:cNvPr id="0" name="${escapeXml(altText)}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+		`<pic:blipFill><a:blip r:embed="${img.rId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+		`<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+		`<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+		`</pic:pic></a:graphicData></a:graphic>` +
+		`</wp:inline></w:drawing>`;
+}
+
 function parseTableRow(line: string): string[] {
 	return line.split("|").slice(1, -1).map((cell) => cell.trim());
 }
 
 function buildDocumentXml(paragraphs: DocxParagraph[]): string {
-	const body = paragraphs.map(paragraphToXml).join("");
+	const body = paragraphs.map(p => paragraphToXml(p)).join("");
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"
+xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body>
 </w:document>`;
 }
 
 function paragraphToXml(paragraph: DocxParagraph): string {
+	if (paragraph.style === "TableRow") {
+		const cells = paragraph.runs.map(() =>
+			`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr><w:r><w:t xml:space="preserve"> </w:t></w:r></w:p></w:tc>`
+		).join("");
+		return `<w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr>${cells}</w:p>`;
+	}
+
 	const style = paragraph.style ? `<w:pPr><w:pStyle w:val="${paragraph.style}"/></w:pPr>` : "";
 	const runs = paragraph.runs.map(runToXml).join("");
 	return `<w:p>${style}${runs}</w:p>`;
 }
 
 function runToXml(run: DocxRun): string {
+	if (run.drawing) {
+		return `<w:r>${run.drawing}</w:r>`;
+	}
 	const props: string[] = [];
 	if (run.bold) props.push("<w:b/>");
 	if (run.italics) props.push("<w:i/>");
 	if (run.code) props.push('<w:rStyle w:val="CodeChar"/>');
 	const runProps = props.length > 0 ? `<w:rPr>${props.join("")}</w:rPr>` : "";
 	return `<w:r>${runProps}<w:t xml:space="preserve">${escapeXml(run.text)}</w:t></w:r>`;
+}
+
+function buildContentTypes(images: DocxImage[]): string {
+	const imageTypes = new Set<string>();
+	for (const img of images) {
+		imageTypes.add(img.ext);
+	}
+	const imageEntries = Array.from(imageTypes).map(ext => {
+		const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
+		return `<Default Extension="${ext}" ContentType="${mime}"/>`;
+	}).join("");
+
+	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+${imageEntries}
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`;
+}
+
+function buildRels(images: DocxImage[]): string {
+	const rels = images.map(img =>
+		`<Relationship Id="${img.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${img.mediaPath.replace("word/", "")}"/>`
+	).join("");
+
+	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+${rels}
+</Relationships>`;
 }
 
 function encodeXml(xml: string): Uint8Array {
@@ -332,14 +534,6 @@ function isImagePath(path: string): boolean {
 	return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(path);
 }
 
-const CONTENT_TYPES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-</Types>`;
-
 const PACKAGE_RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
@@ -352,6 +546,9 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="200" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="160" w:after="80"/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="140" w:after="60"/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="120" w:after="40"/></w:pPr><w:rPr><w:b/><w:i/><w:sz w:val="20"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="100" w:after="40"/></w:pPr><w:rPr><w:i/><w:sz w:val="20"/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="Code"><w:name w:val="Code"/><w:basedOn w:val="Normal"/><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="20"/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720"/></w:pPr><w:rPr><w:i/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style>

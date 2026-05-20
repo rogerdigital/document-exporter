@@ -1,12 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
-// Test the internal rendering functions by testing through the exported renderHtmlDocument
-// We need to test the generated HTML structure
-
 describe("HTML Document rendering", () => {
-	// Since the rendering functions are private, we test through the output
-	// by examining the generated HTML string
-
 	describe("TOC generation", () => {
 		it("generates TOC with section links", async () => {
 			const { html } = await renderTestHtml([
@@ -59,27 +53,6 @@ describe("HTML Document rendering", () => {
 		});
 	});
 
-	describe("print-ready mode", () => {
-		it("includes print stylesheet", async () => {
-			const { html } = await renderTestHtml(
-				[{ sourcePath: "a.md", title: "A", markdown: "x", frontmatter: {} }],
-				true,
-			);
-
-			expect(html).toContain("@media print");
-			expect(html).toContain("title-page");
-		});
-
-		it("regular mode excludes print stylesheet", async () => {
-			const { html } = await renderTestHtml(
-				[{ sourcePath: "a.md", title: "A", markdown: "x", frontmatter: {} }],
-				false,
-			);
-
-			expect(html).not.toContain("@media print");
-			expect(html).not.toContain("title-page");
-		});
-	});
 	describe("XSS prevention", () => {
 		it("escapes HTML in markdown body content", async () => {
 			const { html } = await renderTestHtml([
@@ -182,7 +155,7 @@ interface TestSection {
 	frontmatter: Record<string, unknown>;
 }
 
-async function renderTestHtml(sections: TestSection[], printReady = false) {
+async function renderTestHtml(sections: TestSection[]) {
 	const writtenFiles: string[] = [];
 	const writer = createTestWriter(writtenFiles);
 
@@ -193,7 +166,7 @@ async function renderTestHtml(sections: TestSection[], printReady = false) {
 	};
 	const plan = { outputRoot: "exports", outputFilename: "index", profile: "html-document" as const };
 
-	await invokeRenderHtml(doc, plan, writer, printReady);
+	await invokeRenderHtml(doc, plan, writer);
 
 	const writeCall = (writer.writeText as unknown as { mock: { calls: string[][] } }).mock.calls.find(
 		(c) => c[0].endsWith(".html"),
@@ -207,9 +180,7 @@ async function invokeRenderHtml(
 	doc: { title: string; sections: TestSection[]; attachments: { sourcePath: string; outputRelativePath: string }[] },
 	plan: { outputRoot: string; outputFilename: string; profile: "html-document" },
 	writer: ReturnType<typeof createTestWriter>,
-	printReady = false,
 ) {
-	// Inline the import to avoid circular issues
 	const mod = await import("@/formats/html-document");
-	return mod.renderHtmlDocument(doc, plan as unknown as Parameters<typeof mod.renderHtmlDocument>[1], writer as unknown as Parameters<typeof mod.renderHtmlDocument>[2], printReady);
+	return mod.renderHtmlDocument(doc, plan as unknown as Parameters<typeof mod.renderHtmlDocument>[1], writer as unknown as Parameters<typeof mod.renderHtmlDocument>[2]);
 }
