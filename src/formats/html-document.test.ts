@@ -81,9 +81,11 @@ describe("HTML Document rendering", () => {
 		it("keeps exported pages scrollable when custom app styles are included", () => {
 			const html = buildHtmlDoc("Test", "", "<p>Body</p>", "html, body { height: 100%; overflow: hidden; }");
 
-			expect(html).toContain('<body class="markdown-rendered">');
+			expect(html).toContain("<body>");
+			expect(html).toContain('<main class="markdown-rendered">');
 			expect(html).not.toContain("app-container");
 			expect(html).toContain("html, body { height: auto !important; min-height: 100% !important; overflow: auto !important; }");
+			expect(html).toContain("<p>Body</p>");
 		});
 	});
 
