@@ -59,7 +59,12 @@ describe("ProgressNotice", () => {
 			value: window.document,
 			configurable: true,
 		});
+		Object.defineProperty(document, "hasFocus", {
+			value: () => true,
+			configurable: true,
+		});
 		noticeInstances.length = 0;
+		delete window.Notification;
 	});
 
 	it("shows notice on start with title", () => {
@@ -117,6 +122,55 @@ describe("ProgressNotice", () => {
 		const notice = lastNotice();
 		p.finish("Done");
 		expect(notice.noticeEl.parentElement).toBeNull();
+	});
+
+	it("sends a system notification on finish when Obsidian is not focused", () => {
+		const notify = vi.fn();
+		window.Notification = vi.fn(function (title: string, options: { body?: string }) {
+			notify(title, options);
+		});
+		window.Notification.permission = "granted";
+		Object.defineProperty(document, "hasFocus", {
+			value: () => false,
+			configurable: true,
+		});
+
+		const p = new ProgressNotice("Exporting: test");
+		p.start(5);
+		p.finish("Export complete: out");
+
+		expect(notify).toHaveBeenCalledWith("Document Exporter", {
+			body: "Export complete: out",
+		});
+	});
+
+	it("falls back to Electron notifications when web notifications are not granted", () => {
+		const notify = vi.fn();
+		window.Notification = { permission: "default" };
+		window.require = vi.fn((moduleId: string) => {
+			if (moduleId !== "electron") return undefined;
+			return {
+				remote: {
+					Notification: vi.fn(function (options: { title: string; body?: string }) {
+						notify(options);
+						this.show = vi.fn();
+					}),
+				},
+			};
+		});
+		Object.defineProperty(document, "hasFocus", {
+			value: () => false,
+			configurable: true,
+		});
+
+		const p = new ProgressNotice("Exporting: test");
+		p.start(5);
+		p.finish("Export complete: out");
+
+		expect(notify).toHaveBeenCalledWith({
+			title: "Document Exporter",
+			body: "Export complete: out",
+		});
 	});
 
 	it("increments progress bar on increment", () => {

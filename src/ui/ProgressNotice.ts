@@ -60,6 +60,46 @@ export class ProgressNotice {
 		this.pctEl = null;
 		this.phaseEl = null;
 		new Notice(finalMessage, 5000);
+		this.notifyWhenUnfocused(finalMessage);
+	}
+
+	private notifyWhenUnfocused(message: string): void {
+		if (typeof document === "undefined" || document.hasFocus()) return;
+
+		try {
+			if (this.notifyViaWebNotification(message)) return;
+			this.notifyViaElectron(message);
+		} catch {
+			// Native notifications are best-effort; the in-app Notice above is the fallback.
+		}
+	}
+
+	private notifyViaWebNotification(message: string): boolean {
+		const notifier = typeof window !== "undefined" ? window.Notification : undefined;
+		if (!notifier || notifier.permission !== "granted") return false;
+		new notifier("Document Exporter", { body: message });
+		return true;
+	}
+
+	private notifyViaElectron(message: string): void {
+		const desktopWindow = window as Window & {
+			electron?: unknown;
+			require?: (moduleId: string) => unknown;
+		};
+		const electron = desktopWindow.electron ?? desktopWindow.require?.("electron");
+		if (!electron || typeof electron !== "object") return;
+
+		const remote = (electron as { remote?: unknown }).remote;
+		if (!remote || typeof remote !== "object") return;
+
+		const NotificationCtor = (remote as { Notification?: unknown }).Notification;
+		if (typeof NotificationCtor !== "function") return;
+
+		const notification = new (NotificationCtor as new (options: { title: string; body: string }) => { show?: () => void })({
+			title: "Document Exporter",
+			body: message,
+		});
+		notification.show?.();
 	}
 
 	private show(): void {

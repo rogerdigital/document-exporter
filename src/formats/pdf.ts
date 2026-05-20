@@ -125,7 +125,6 @@ interface PdfWebContents {
 
 interface PdfBrowserWindow {
 	loadURL: (url: string) => Promise<void>;
-	showInactive?: () => void;
 	close: () => void;
 	webContents: PdfWebContents;
 }
@@ -166,6 +165,24 @@ ${PDF_PAGE_RESET_CSS}</style></head>
 <body><main class="pdf-export-page markdown-rendered">${htmlBody}</main></body></html>`;
 }
 
+export function createPdfBrowserWindowOptions(): ConstructorParameters<PdfBrowserWindowConstructor>[0] {
+	return {
+		show: false,
+		frame: false,
+		skipTaskbar: true,
+		focusable: false,
+		transparent: true,
+		backgroundColor: "#ffffff",
+		opacity: 0.01,
+		width: 800,
+		height: 1200,
+		webPreferences: {
+			contextIsolation: false,
+			nodeIntegration: false,
+		},
+	};
+}
+
 async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uint8Array> {
 	if (!Platform.isDesktop) {
 		throw new Error("PDF export requires the desktop app.");
@@ -185,28 +202,10 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uin
 		throw new Error("BrowserWindow not found on electron.remote");
 	}
 
-	const win = new BrowserWindow({
-		show: true,
-		frame: false,
-		skipTaskbar: true,
-		focusable: false,
-		transparent: true,
-		backgroundColor: "#ffffff",
-		opacity: 0.01,
-		width: 800,
-		height: 1200,
-		webPreferences: {
-			contextIsolation: false,
-			nodeIntegration: false,
-		},
-	});
+	const win = new BrowserWindow(createPdfBrowserWindowOptions());
 
 	try {
 		await win.loadURL(printUrl);
-		if (typeof win.showInactive === "function") {
-			win.showInactive();
-		}
-
 		await waitForPrintableContent(win);
 
 		const pdfData = await win.webContents.printToPDF({

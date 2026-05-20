@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPdfHtml } from "@/formats/pdf";
+import { buildPdfHtml, createPdfBrowserWindowOptions } from "@/formats/pdf";
 
 describe("PDF rendering", () => {
 	it("appends page reset styles after app styles", () => {
@@ -16,5 +16,13 @@ describe("PDF rendering", () => {
 		expect(html).toContain('<main class="pdf-export-page markdown-rendered">');
 		expect(html).toContain("display: block !important");
 		expect(html).toContain("<p>Content</p>");
+	});
+
+	it("creates the print window hidden and non-focusable", () => {
+		const options = createPdfBrowserWindowOptions();
+
+		expect(options.show).toBe(false);
+		expect(options.focusable).toBe(false);
+		expect(options.skipTaskbar).toBe(true);
 	});
 });
