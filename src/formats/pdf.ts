@@ -48,18 +48,13 @@ export async function renderPdf(
 
 	const htmlBody = `<h1>${escapeHtml(doc.title)}</h1>\n${toc}\n${finalBody}`;
 
-	try {
-		const pdfBuffer = await printViaBrowserWindow(htmlBody, cssText + "\n" + printCss);
-		if (pdfBuffer.byteLength < MIN_VALID_PDF_BYTES) {
-			throw new Error("generated PDF is unexpectedly small; the print page may be blank");
-		}
-		const resolved = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "")}.pdf`;
-		await writer.ensureFolder(resolved.substring(0, resolved.lastIndexOf("/")));
-		await writer.writeBinary(resolved, pdfBuffer);
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
-		warnings.push(`PDF generation failed: ${msg}`);
+	const pdfBuffer = await printViaBrowserWindow(htmlBody, cssText + "\n" + printCss);
+	if (pdfBuffer.byteLength < MIN_VALID_PDF_BYTES) {
+		throw new Error("PDF generation failed: generated PDF is unexpectedly small; the print page may be blank");
 	}
+	const resolved = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "")}.pdf`;
+	await writer.ensureFolder(resolved.substring(0, resolved.lastIndexOf("/")));
+	await writer.writeBinary(resolved, pdfBuffer);
 
 	return warnings;
 }

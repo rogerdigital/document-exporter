@@ -152,19 +152,28 @@ export class ExportRunner {
 			// Step 5: Render format
 			callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[3] : `Rendering ${file.basename}`);
 			let formatWarnings: string[] = [];
-			switch (effectivePlan.profile) {
-				case "markdown-bundle":
-					formatWarnings = await renderMarkdownBundle(doc, effectivePlan, writer, outputFilePath);
-					break;
-				case "html-document":
-					formatWarnings = await renderHtmlDocument(doc, effectivePlan, writer, this.app, outputFilePath);
-					break;
-				case "pdf":
-					formatWarnings = await renderPdf(doc, effectivePlan, writer, this.app, outputFilePath);
-					break;
-				case "docx":
-					formatWarnings = await renderDocx(doc, effectivePlan, writer, this.app, outputFilePath);
-					break;
+			try {
+				switch (effectivePlan.profile) {
+					case "markdown-bundle":
+						formatWarnings = await renderMarkdownBundle(doc, effectivePlan, writer, outputFilePath);
+						break;
+					case "html-document":
+						formatWarnings = await renderHtmlDocument(doc, effectivePlan, writer, this.app, outputFilePath);
+						break;
+					case "pdf":
+						formatWarnings = await renderPdf(doc, effectivePlan, writer, this.app, outputFilePath);
+						break;
+					case "docx":
+						formatWarnings = await renderDocx(doc, effectivePlan, writer, this.app, outputFilePath);
+						break;
+				}
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				return {
+					success: false,
+					outputRoot,
+					warnings: [msg],
+				};
 			}
 			allWarnings.push(...formatWarnings);
 			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
