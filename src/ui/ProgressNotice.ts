@@ -67,17 +67,19 @@ export class ProgressNotice {
 			this.notice.hide();
 		}
 		this.notice = new Notice("", 0);
-		const el = (this.notice as unknown as { noticeEl: HTMLElement }).noticeEl;
-		el.empty();
-		el.classList.add("de-progress-notice");
+		const noticeEl = (this.notice as unknown as { noticeEl: HTMLElement }).noticeEl;
+		noticeEl.empty();
+		noticeEl.classList.add("de-progress-notice");
 
-		this.titleEl = el.createDiv({ cls: PROGRESS_TITLE_CLASS, text: this.title });
+		const content = noticeEl.createDiv({ cls: "de-progress-content" });
 
-		const barContainer = el.createDiv({ cls: PROGRESS_BAR_CLASS });
+		this.titleEl = content.createDiv({ cls: PROGRESS_TITLE_CLASS, text: this.title });
+
+		const barContainer = content.createDiv({ cls: PROGRESS_BAR_CLASS });
 		this.fillEl = barContainer.createDiv({ cls: PROGRESS_FILL_CLASS });
 		this.pctEl = barContainer.createDiv({ cls: PROGRESS_PCT_CLASS, text: "0%" });
 
-		const bottomRow = el.createDiv({ cls: PROGRESS_PHASE_CLASS });
+		const bottomRow = content.createDiv({ cls: PROGRESS_PHASE_CLASS });
 		this.phaseEl = bottomRow.createSpan({ text: this.phase });
 
 		const cancelBtn = bottomRow.createEl("button", {
