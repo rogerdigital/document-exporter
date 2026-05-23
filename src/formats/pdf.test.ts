@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildPdfHtml, buildPdfDocumentWriteScript, createPdfBrowserWindowOptions } from "@/formats/pdf";
+import {
+	buildPdfHtml,
+	buildPdfDocumentWriteScript,
+	createPdfBrowserWindowOptions,
+	encodeAttachmentDataUri,
+} from "@/formats/pdf";
 
 describe("PDF rendering", () => {
 	it("appends page reset styles after app styles", () => {
@@ -44,5 +49,13 @@ describe("PDF rendering", () => {
 		expect(script).toContain("document.write(");
 		expect(script).toContain(JSON.stringify(html));
 		expect(script).not.toContain("data:text/html");
+	});
+
+	it("encodes binary attachments as PDF data URIs", () => {
+		const buffer = new Uint8Array([0, 255, 16, 128]).buffer;
+
+		const dataUri = encodeAttachmentDataUri(buffer, "png");
+
+		expect(dataUri).toBe("data:image/png;base64,AP8QgA==");
 	});
 });

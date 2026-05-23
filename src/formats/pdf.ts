@@ -31,10 +31,8 @@ export async function renderPdf(
 				const file = app.vault.getAbstractFileByPath(att.sourcePath);
 				if (file instanceof TFile) {
 					const buffer = await app.vault.readBinary(file);
-					const base64 = arrayBufferToBase64(buffer);
 					const ext = att.sourcePath.split(".").pop()?.toLowerCase() ?? "";
-					const mime = mimeFromExt(ext);
-					const dataUri = `data:${mime};base64,${base64}`;
+					const dataUri = encodeAttachmentDataUri(buffer, ext);
 					finalBody = finalBody.split(att.outputRelativePath).join(dataUri);
 				}
 			} catch {
@@ -353,11 +351,8 @@ function mimeFromExt(ext: string): string {
 	return map[ext] ?? "application/octet-stream";
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
+export function encodeAttachmentDataUri(buffer: ArrayBuffer, ext: string): string {
 	const bytes = new Uint8Array(buffer);
-	let binary = "";
-	for (let i = 0; i < bytes.length; i++) {
-		binary += String.fromCharCode(bytes[i]);
-	}
-	return btoa(binary);
+	const base64 = Buffer.from(bytes).toString("base64");
+	return `data:${mimeFromExt(ext)};base64,${base64}`;
 }
