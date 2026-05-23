@@ -1,6 +1,6 @@
 {
   "name": "document-exporter",
-  "version": "0.4.5",
+  "version": "0.4.7",
   "description": "Export notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.",
   "main": "main.js",
   "scripts": {
