@@ -9,13 +9,10 @@ export async function renderMarkdownBundle(
 ): Promise<string[]> {
 	const warnings: string[] = [];
 
-	// Ensure output folder
+	// Ensure output folder exists (attachments are copied centrally by
+	// ExportRunner Step 6 into <assetsRoot>/assets, where assetsRoot is the
+	// target folder, consistent across all formats).
 	await writer.ensureFolder(plan.outputRoot);
-
-	// Create assets folder only when there are attachments
-	if (doc.attachments.length > 0) {
-		await writer.ensureFolder(`${plan.outputRoot}/assets`);
-	}
 
 	// Combine sections into document.md
 	const parts: string[] = [];
@@ -32,18 +29,6 @@ export async function renderMarkdownBundle(
 
 	const content = parts.join("\n");
 	await writer.writeText(outputFilePath, content);
-
-	// Copy attachments
-	for (const att of doc.attachments) {
-		try {
-			await writer.copyBinaryFile(
-				att.sourcePath,
-				`${plan.outputRoot}/${att.outputRelativePath}`,
-			);
-		} catch {
-			warnings.push(`Failed to copy attachment: ${att.sourcePath}`);
-		}
-	}
 
 	return warnings;
 }

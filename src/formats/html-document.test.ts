@@ -37,7 +37,7 @@ describe("HTML Document rendering", () => {
 	});
 
 	describe("asset URLs", () => {
-		it("copies attachments to assets folder", async () => {
+		it("does not copy attachments itself (handled by ExportRunner)", async () => {
 			const writtenFiles: string[] = [];
 			const writer = createTestWriter(writtenFiles);
 
@@ -50,7 +50,11 @@ describe("HTML Document rendering", () => {
 
 			await invokeRenderHtml(doc, plan, writer);
 
-			expect(writtenFiles).toContain("exports/assets");
+			// Attachments are copied centrally by ExportRunner Step 6 into the
+			// target folder's assets dir. The renderer must not create its own
+			// duplicate assets folder under outputRoot.
+			expect(writtenFiles).not.toContain("exports/assets");
+			expect(writer.copyBinaryFile).not.toHaveBeenCalled();
 		});
 
 		it("renders safe embedded video tags without escaping them", async () => {

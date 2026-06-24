@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { ExportRunner, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
+import { OutputWriter } from "@/export/OutputWriter";
 
 vi.mock("@/formats/pdf", () => ({
 	renderPdf: vi.fn(() => Promise.reject(new Error("PDF generation failed: test failure"))),
@@ -155,6 +156,42 @@ describe("ExportRunner", () => {
 
 			expect(result.success).toBe(false);
 			expect(result.warnings[0]).toContain("PDF generation failed");
+		});
+	});
+
+	describe("attachment destination", () => {
+		it("copies attachments into the target folder's assets (folder source)", async () => {
+			const app = createMockApp(["notes/a.md"]);
+			// Folder source: outputFolderName set → assetsRoot = outputRoot/folderName
+			const plan = {
+				profile: "markdown-bundle" as const,
+				source: { type: "folder" as const, path: "notes" },
+				inputFiles: ["notes/a.md"],
+				outputRoot: "exports",
+				outputFilename: "index",
+				outputFolderName: "notes",
+				outputFiles: ["exports/notes/a.md"],
+				attachmentCopies: [
+					{ sourcePath: "notes/img.png", outputRelativePath: "assets/img.png" },
+				],
+			};
+			const runner = new ExportRunner(app as never);
+
+			const copySpy = vi
+				.spyOn(OutputWriter.prototype, "copyBinaryFile")
+				.mockResolvedValue(undefined);
+
+			await runner.run(
+				plan as never,
+				{ ...defaultSettings(), copyAttachments: false },
+				{ onFileStart: vi.fn(), onFileComplete: vi.fn(), onPhase: vi.fn() },
+			);
+
+			// Attachment must land under the target folder, not the export root.
+			const destPaths = copySpy.mock.calls.map((c) => c[1] as string);
+			expect(destPaths).toContain("exports/notes/assets/img.png");
+			expect(destPaths).not.toContain("exports/assets/img.png");
+			copySpy.mockRestore();
 		});
 	});
 });
