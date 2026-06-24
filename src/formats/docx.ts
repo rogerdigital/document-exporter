@@ -9,6 +9,7 @@ type DocxRun = {
 	code?: boolean;
 	emoji?: boolean;
 	drawing?: string;
+	break?: boolean;
 };
 
 type DocxParagraph = {
@@ -176,8 +177,33 @@ function parseMarkdownToParagraphs(markdown: string, imageMap: Map<string, DocxI
 	const lines = markdown.split("\n");
 	let i = 0;
 
+	// A "plain text" line is one that isn't a code fence, heading, table row,
+	// list item, blockquote, hr, HTML comment, or empty. Consecutive plain-text
+	// lines (Obsidian soft line breaks, no blank line between them) are merged
+	// into a single paragraph with <w:br/> separating them, matching how
+	// Obsidian renders them in one paragraph.
+	const isSpecialLine = (line: string, idx: number): boolean => {
+		if (line.startsWith("```")) return true;
+		if (/^(#{1,6})\s+(.+)$/.test(line)) return true;
+		if (line.includes("|") && idx + 1 < lines.length && /^\|[-:| ]+\|$/.test(lines[idx + 1])) return true;
+		if (/^[\s]*[-*+]\s/.test(line)) return true;
+		if (/^[\s]*\d+\.\s/.test(line)) return true;
+		if (line.startsWith("> ")) return true;
+		if (/^[-*_]{3,}\s*$/.test(line)) return true;
+		// Skip HTML comments (e.g. <!-- source: path -->) — they shouldn't
+		// appear as literal text in the document body.
+		if (/^<!--.*-->\s*$/.test(line)) return true;
+		return false;
+	};
+
 	while (i < lines.length) {
 		const line = lines[i];
+
+		// Skip HTML comment lines entirely (source-path comments etc.)
+		if (/^<!--.*-->\s*$/.test(line)) {
+			i++;
+			continue;
+		}
 
 		if (line.startsWith("```")) {
 			i++;
@@ -236,8 +262,33 @@ function parseMarkdownToParagraphs(markdown: string, imageMap: Map<string, DocxI
 			continue;
 		}
 
-		paragraphs.push({ runs: line.trim() === "" ? [{ text: "" }] : parseInline(line, imageMap) });
+		// Empty line → paragraph separator
+		if (line.trim() === "") {
+			paragraphs.push({ runs: [{ text: "" }] });
+			i++;
+			continue;
+		}
+
+		// Aggregate consecutive plain-text lines (soft line breaks) into one
+		// paragraph, with <w:br/> between them.
+		const textLines: string[] = [line];
 		i++;
+		while (i < lines.length && lines[i].trim() !== "" && !isSpecialLine(lines[i], i)) {
+			textLines.push(lines[i]);
+			i++;
+		}
+
+		const runs: DocxRun[] = [];
+		for (let li = 0; li < textLines.length; li++) {
+			const lineRuns = parseInline(textLines[li], imageMap);
+			if (li > 0 && lineRuns.length > 0) {
+				// Mark the first run of subsequent lines with a break so the
+				// line renders below the previous one within the same paragraph.
+				lineRuns[0] = { ...lineRuns[0], break: true };
+			}
+			runs.push(...lineRuns);
+		}
+		paragraphs.push({ runs });
 	}
 
 	return paragraphs;
@@ -395,7 +446,10 @@ function runToXml(run: DocxRun): string {
 	if (run.italics) props.push("<w:i/>");
 	if (run.code) props.push('<w:rStyle w:val="CodeChar"/>');
 	const runProps = props.length > 0 ? `<w:rPr>${props.join("")}</w:rPr>` : "";
-	return `<w:r>${runProps}<w:t xml:space="preserve">${escapeXml(run.text)}</w:t></w:r>`;
+	// A soft line break (<w:br/>) inside a paragraph. Placed before the text so
+	// consecutive plain-text lines share one <w:p> with breaks between them.
+	const br = run.break ? "<w:br/>" : "";
+	return `<w:r>${runProps}${br}<w:t xml:space="preserve">${escapeXml(run.text)}</w:t></w:r>`;
 }
 
 function buildContentTypes(images: DocxImage[]): string {

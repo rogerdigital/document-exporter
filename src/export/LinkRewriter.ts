@@ -180,7 +180,9 @@ export class LinkRewriter {
 			return `![${link}](${relPath})`;
 		}
 
-		return `![](${relPath})`;
+		// markdown-bundle: use the link text as alt. An empty alt (![](path))
+		// is not rendered as an image by Obsidian and many Markdown viewers.
+		return `![${link}](${relPath})`;
 	}
 }
 

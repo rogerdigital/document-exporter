@@ -109,7 +109,9 @@ describe("LinkRewriter", () => {
 		it("rewrites wiki embed for attachment in markdown-bundle profile", () => {
 			const rewriter = makeRewriter("markdown-bundle");
 			const { markdown } = rewriter.rewrite("![[image.png]]", "notes/note1.md");
-			expect(markdown).toBe("![](attachments/image.png)");
+			// alt text must be populated (the link text); empty alt is not
+			// rendered as an image by Obsidian and many Markdown viewers.
+			expect(markdown).toBe("![image.png](attachments/image.png)");
 		});
 
 		it("rewrites wiki embed for attachment as img tag in html-document profile", () => {

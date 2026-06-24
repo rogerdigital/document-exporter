@@ -1,8 +1,6 @@
 import { App, TFile } from "obsidian";
 import { AssembledDocument, DocumentSection } from "@/types";
 
-const HEADING_RE = /^(#{1,6})\s+(.+)$/m;
-
 export class DocumentAssembler {
 	private app: App;
 	private includeSourcePaths: boolean;
@@ -35,8 +33,21 @@ export class DocumentAssembler {
 	private async buildSection(file: TFile): Promise<DocumentSection> {
 		const raw = await this.app.vault.read(file);
 		const { body, frontmatter } = stripFrontmatter(raw);
-		const sectionTitle = deriveTitle(file, frontmatter, body);
-		const normalized = normalizeHeadings(body, 1);
+		let sectionTitle = deriveTitle(file, frontmatter);
+		let contentBody = body;
+
+		// When the title is NOT from frontmatter, check if the body starts with
+		// an H1. If so, use that heading as the title and remove it from the
+		// body so each format's prepended title doesn't duplicate it.
+		if (typeof frontmatter.title !== "string") {
+			const extracted = extractLeadingH1(contentBody);
+			if (extracted) {
+				sectionTitle = extracted.title;
+				contentBody = extracted.remaining;
+			}
+		}
+
+		const normalized = normalizeHeadings(contentBody, 1);
 		const markdown = this.includeSourcePaths
 			? `<!-- source: ${file.path} -->\n${normalized}`
 			: normalized;
@@ -93,18 +104,32 @@ function parseYamlValue(value: string): unknown {
 export function deriveTitle(
 	file: TFile,
 	frontmatter: Record<string, unknown>,
-	body: string,
 ): string {
+	// Prefer an explicit frontmatter title; otherwise fall back to the file
+	// basename. The body's leading H1 is handled separately by
+	// extractLeadingH1 in buildSection so it can be removed from the body.
 	if (typeof frontmatter.title === "string") {
 		return frontmatter.title;
 	}
 
-	const headingMatch = body.match(HEADING_RE);
-	if (headingMatch) {
-		return headingMatch[2].trim();
-	}
-
 	return file.basename;
+}
+
+/**
+ * If the markdown body begins with a level-1 heading (`# Title`), extract that
+ * heading's text as the document title and return the body with that line
+ * removed. Returns null when the body does not start with an H1, so the caller
+ * falls back to the filename-derived title.
+ */
+export function extractLeadingH1(
+	body: string,
+): { title: string; remaining: string } | null {
+	const match = body.match(/^#\s+(.+?)\s*(?:\n|$)/);
+	if (!match) return null;
+	const title = match[1].trim();
+	// Remove the matched H1 line (and its trailing newline) from the body.
+	const remaining = body.slice(match[0].length);
+	return { title, remaining };
 }
 
 export function normalizeHeadings(
