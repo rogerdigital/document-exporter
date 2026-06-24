@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
 	stripFrontmatter,
 	deriveTitle,
+	extractLeadingH1,
 	normalizeHeadings,
 } from "@/export/DocumentAssembler";
 
@@ -72,27 +73,48 @@ describe("deriveTitle", () => {
 	} as never;
 
 	it("uses frontmatter title when present", () => {
-		const result = deriveTitle(mockFile, { title: "My Title" }, "body");
+		const result = deriveTitle(mockFile, { title: "My Title" });
 		expect(result).toBe("My Title");
 	});
 
-	it("falls back to first heading", () => {
-		const result = deriveTitle(mockFile, {}, "# Heading One\nSome text");
-		expect(result).toBe("Heading One");
-	});
-
-	it("falls back to file basename when no frontmatter title or heading", () => {
-		const result = deriveTitle(mockFile, {}, "Just plain text");
+	it("falls back to file basename when no frontmatter title", () => {
+		const result = deriveTitle(mockFile, {});
 		expect(result).toBe("test");
 	});
 
-	it("prefers frontmatter title over heading", () => {
-		const result = deriveTitle(
-			mockFile,
-			{ title: "From Frontmatter" },
-			"# Heading",
-		);
-		expect(result).toBe("From Frontmatter");
+	it("does not infer title from first heading (avoids duplication)", () => {
+		// The first heading stays in the body; inferring the title from it
+		// would duplicate it as the document title.
+		const result = deriveTitle(mockFile, {});
+		expect(result).toBe("test");
+		expect(result).not.toBe("Heading One");
+	});
+});
+
+describe("extractLeadingH1", () => {
+	it("extracts title and removes the H1 line when body starts with H1", () => {
+		const result = extractLeadingH1("# My Real Title\n\nBody text");
+		expect(result).not.toBeNull();
+		expect(result!.title).toBe("My Real Title");
+		expect(result!.remaining).toBe("Body text");
+	});
+
+	it("returns null when body does not start with H1", () => {
+		expect(extractLeadingH1("Just plain text")).toBeNull();
+		expect(extractLeadingH1("## Subtitle only")).toBeNull();
+		expect(extractLeadingH1("")).toBeNull();
+	});
+
+	it("does not match H1 indented or mid-document", () => {
+		// leading spaces → not a heading
+		expect(extractLeadingH1("   # Not a heading")).toBeNull();
+		// H1 after other content → not leading
+		expect(extractLeadingH1("Intro\n# Heading")).toBeNull();
+	});
+
+	it("trims trailing whitespace from the title", () => {
+		const result = extractLeadingH1("# Spaced Title   \nBody");
+		expect(result!.title).toBe("Spaced Title");
 	});
 });
 

@@ -305,6 +305,67 @@ describe("DOCX rendering", () => {
 		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
 		expect(packageText).toContain("[Image: alt]");
 	});
+
+	it("merges adjacent soft-break lines into one paragraph with <w:br/>", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => { writtenData = data; }),
+		};
+		const doc: AssembledDocument = {
+			title: "Test",
+			sections: [{
+				title: "Test",
+				sourcePath: "a.md",
+				// Three adjacent lines without blank lines = soft breaks
+				markdown: "第一行\n第二行\n第三行",
+				frontmatter: {},
+			}],
+			attachments: [],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never, null);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		// All three lines share ONE paragraph (<w:p>), separated by <w:br/>.
+		// Count <w:p> opening tags for body paragraphs — there should be exactly
+		// one containing the three text lines (plus the Title paragraph).
+		const bodyParagraphs = packageText.match(/<w:p>/g) ?? [];
+		// Title paragraph + one merged text paragraph = 2
+		expect(bodyParagraphs.length).toBe(2);
+		expect(packageText).toContain("<w:br/>");
+		expect(packageText).toContain("第一行");
+		expect(packageText).toContain("第二行");
+		expect(packageText).toContain("第三行");
+	});
+
+	it("skips HTML comment lines (source-path comments) instead of rendering them as text", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => { writtenData = data; }),
+		};
+		const doc: AssembledDocument = {
+			title: "Test",
+			sections: [{
+				title: "Test",
+				sourcePath: "a.md",
+				markdown: "<!-- source: secret/path.md -->\nVisible text",
+				frontmatter: {},
+			}],
+			attachments: [],
+		};
+		const plan = { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never, null);
+
+		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		// The comment must NOT appear as literal text in the document body.
+		expect(packageText).toContain("Visible text");
+		expect(packageText).not.toContain("source:");
+		expect(packageText).not.toContain("&lt;!--");
+	});
 });
 
 function createMinimalPng(dimensions: { width: number; height: number } = { width: 1, height: 1 }): Uint8Array {
