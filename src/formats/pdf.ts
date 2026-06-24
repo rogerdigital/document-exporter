@@ -108,7 +108,9 @@ interface PdfWebContents {
 	printToPDF: (options: {
 		printBackground: boolean;
 		pageSize: "A4";
+		preferCSSPageSize: boolean;
 		margins: {
+			marginType: "custom";
 			top: number;
 			bottom: number;
 			left: number;
@@ -181,6 +183,26 @@ export function createPdfBrowserWindowOptions(): ConstructorParameters<PdfBrowse
 	};
 }
 
+export function createPdfPrintOptions(): Parameters<PdfWebContents["printToPDF"]>[0] {
+	return {
+		printBackground: true,
+		pageSize: "A4",
+		// Let CSS @page own ALL physical margins (see PAGE_MARGIN_*). When
+		// preferCSSPageSize is true, Chromium reads margins from @page; but if the
+		// printToPDF margins option is also non-zero, Chromium uses THOSE for the
+		// page box, which on continuation pages drops the top margin to 0. Keeping
+		// the option at zero lets @page margins apply on every page.
+		preferCSSPageSize: true,
+		margins: {
+			marginType: "custom",
+			top: 0,
+			bottom: 0,
+			left: 0,
+			right: 0,
+		},
+	};
+}
+
 async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uint8Array> {
 	if (!Platform.isDesktop) {
 		throw new Error("PDF export requires the desktop app.");
@@ -206,16 +228,7 @@ async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uin
 		await win.webContents.executeJavaScript(buildPdfDocumentWriteScript(fullHtml));
 		await waitForPrintableContent(win);
 
-		const pdfData = await win.webContents.printToPDF({
-			printBackground: true,
-			pageSize: "A4",
-			margins: {
-				top: 0,
-				bottom: 0,
-				left: 0,
-				right: 0,
-			},
-		});
+		const pdfData = await win.webContents.printToPDF(createPdfPrintOptions());
 
 		return pdfData instanceof Uint8Array ? pdfData : new Uint8Array(pdfData);
 	} finally {
@@ -294,9 +307,18 @@ const PRINT_CSS = `
 	.toc { page-break-after: always; }
 }`;
 
+// Physical page margins in CSS px (96 px = 1 inch). Applied via @page so every
+// page — including continuation pages — keeps a consistent printable area.
+const PAGE_MARGIN_TOP_PX = 52;
+const PAGE_MARGIN_BOTTOM_PX = 52;
+const PAGE_MARGIN_LEFT_PX = 60;
+const PAGE_MARGIN_RIGHT_PX = 60;
+
 const PDF_PAGE_RESET_CSS = `
 @page {
-	margin: 0;
+	/* CSS @page owns physical page margins — reliable on every page including
+	   continuation pages. Units are CSS px (96/inch). */
+	margin: ${PAGE_MARGIN_TOP_PX}px ${PAGE_MARGIN_RIGHT_PX}px ${PAGE_MARGIN_BOTTOM_PX}px ${PAGE_MARGIN_LEFT_PX}px;
 }
 
 html,
@@ -324,15 +346,52 @@ body,
 	line-height: 1.6;
 	max-width: 800px;
 	margin: 0 auto;
-	padding: 1.35cm 1.6cm;
+	padding: 0;
+}
+
+.pdf-export-page p {
+	margin: 0 0 0.65rem;
+}
+
+/* Collapse spacing for any paragraph that contains media. Obsidian renders
+   consecutive image embeds without a blank line into a single <p> separated by
+   <br>, and each embed is wrapped in .internal-embed/.media-embed/.image-embed.
+   Use descendant :has() so multi-media paragraphs are tightened too. The
+   line-height: 1 here also shrinks the <br> line-boxes between consecutive
+   embeds, so media spacing is governed by the per-media margin below — without
+   hiding <br> entirely (which would also kill legitimate soft line breaks in
+   mixed text+media paragraphs). */
+.pdf-export-page p:has(img),
+.pdf-export-page p:has(video),
+.pdf-export-page p:has(object),
+.pdf-export-page p:has(.internal-embed),
+.pdf-export-page p:has(.media-embed),
+.pdf-export-page p:has(.image-embed) {
+	line-height: 1;
+	margin: 0.25rem 0;
 }
 
 .pdf-export-page img {
 	display: block;
 	max-width: min(100%, 384px);
 	height: auto;
-	margin: 1rem 0;
+	margin: 0.25rem 0;
 	page-break-inside: avoid;
+}
+
+.pdf-export-page .internal-embed,
+.pdf-export-page .media-embed,
+.pdf-export-page .image-embed {
+	display: block;
+	line-height: 1;
+	margin: 0.25rem 0 !important;
+	page-break-inside: avoid;
+}
+
+.pdf-export-page .internal-embed img,
+.pdf-export-page .media-embed img,
+.pdf-export-page .image-embed img {
+	margin: 0;
 }
 `;
 

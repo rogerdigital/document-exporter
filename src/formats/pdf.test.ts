@@ -3,6 +3,7 @@ import {
 	buildPdfHtml,
 	buildPdfDocumentWriteScript,
 	createPdfBrowserWindowOptions,
+	createPdfPrintOptions,
 	encodeAttachmentDataUri,
 } from "@/formats/pdf";
 
@@ -29,7 +30,73 @@ describe("PDF rendering", () => {
 		expect(html).toContain(".pdf-export-page img");
 		expect(html).toContain("max-width: min(100%, 384px)");
 		expect(html).toContain("display: block");
-		expect(html).toContain("margin: 1rem 0");
+		expect(html).toContain("margin: 0.25rem 0");
+	});
+
+	it("owns page margins via @page so every page keeps a printable area", () => {
+		const html = buildPdfHtml("<h1>Title</h1><p>Content</p>", "");
+
+		expect(html).toContain("@page {");
+		expect(html).toContain("margin: 52px 60px 52px 60px;");
+	});
+
+	it("prefers CSS page size so @page margins are authoritative", () => {
+		const options = createPdfPrintOptions();
+
+		expect(options.preferCSSPageSize).toBe(true);
+	});
+
+	it("zeroes printToPDF margins so they don't override @page", () => {
+		const options = createPdfPrintOptions();
+
+		// Non-zero printToPDF margins make Chromium use them for the page box,
+		// which drops the top margin on continuation pages. Zero lets @page win.
+		expect(options.margins).toEqual({
+			marginType: "custom",
+			top: 0,
+			bottom: 0,
+			left: 0,
+			right: 0,
+		});
+	});
+
+	it("tightens media-only paragraph spacing in PDF output", () => {
+		const html = buildPdfHtml("<p><img src=\"a.png\"></p><p><img src=\"b.png\"></p>", "");
+
+		expect(html).toContain(".pdf-export-page p:has(img)");
+		expect(html).toContain(".pdf-export-page p:has(.internal-embed)");
+		expect(html).toContain("margin: 0.25rem 0;");
+		expect(html).toContain("line-height: 1;");
+	});
+
+	it("preserves soft line breaks in media paragraphs instead of hiding <br>", () => {
+		const html = buildPdfHtml("<p>text<br><img src=\"a.png\"><br><img src=\"b.png\"></p>", "");
+
+		// Hiding all <br> in a media paragraph also kills legitimate soft line
+		// breaks when text and media share one <p>. Media spacing is controlled
+		// by line-height:1 (shrinks the <br> line-box) + per-media margin, not by
+		// display:none on <br>.
+		expect(html).not.toContain("p:has(img) > br");
+		expect(html).not.toContain("display: none;");
+	});
+
+	it("never hides <br> anywhere in PDF output (regression: soft breaks)", () => {
+		const html = buildPdfHtml("<p>line one<br>line two<br>line three</p>", "");
+
+		// Absolute guard: no rule in the PDF stylesheet may set display:none on
+		// <br>, because Obsidian merges adjacent non-blank lines into one <p>
+		// separated by <br>. Hiding <br> silently collapses soft line breaks.
+		expect(html).not.toMatch(/br\s*\{[^}]*display:\s*none/);
+		expect(html).not.toMatch(/> br\s*\{/);
+	});
+
+	it("normalizes Obsidian native image embed spacing for PDF output", () => {
+		const html = buildPdfHtml('<p><span class="internal-embed media-embed image-embed"><img src="a.png"></span></p>', "");
+
+		expect(html).toContain(".pdf-export-page .internal-embed");
+		expect(html).toContain("margin: 0.25rem 0 !important;");
+		expect(html).toContain(".pdf-export-page .internal-embed img");
+		expect(html).toContain("margin: 0;");
 	});
 
 	it("creates the print window hidden and non-focusable", () => {
