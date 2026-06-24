@@ -12,10 +12,10 @@ export async function renderHtmlDocument(
 ): Promise<string[]> {
 	const warnings: string[] = [];
 
+	// Ensure output folder exists (attachments are copied centrally by
+	// ExportRunner Step 6 into <assetsRoot>/assets, where assetsRoot is the
+	// target folder, consistent across all formats).
 	await writer.ensureFolder(plan.outputRoot);
-	if (doc.attachments.length > 0) {
-		await writer.ensureFolder(`${plan.outputRoot}/assets`);
-	}
 
 	const toc = doc.sections.length > 1 ? generateToc(doc.sections) : "";
 	const { html: body, warnings: renderWarnings } = await renderSections(doc.sections, app, doc.title, doc.attachments);
@@ -27,17 +27,6 @@ export async function renderHtmlDocument(
 	const resolvedOutput = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm)$/i, '')}.html`;
 	await writer.ensureFolder(resolvedOutput.substring(0, resolvedOutput.lastIndexOf("/")));
 	await writer.writeText(resolvedOutput, html);
-
-	for (const att of doc.attachments) {
-		try {
-			await writer.copyBinaryFile(
-				att.sourcePath,
-				`${plan.outputRoot}/${att.outputRelativePath}`,
-			);
-		} catch {
-			warnings.push(`Failed to copy attachment: ${att.sourcePath}`);
-		}
-	}
 
 	return warnings;
 }
