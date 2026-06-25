@@ -98,6 +98,9 @@ export class ExportRunner {
 
 		const assembler = new DocumentAssembler(this.app, settings.includeSourcePathComments);
 		const copiedAttachments = new Set<string>();
+		const collector = settings.copyAttachments
+			? new AttachmentCollector(this.app, exportedPaths)
+			: null;
 
 		const isSingleFile = files.length === 1;
 		let completedFiles = 0;
@@ -117,9 +120,8 @@ export class ExportRunner {
 
 			// Step 2: Collect attachments for this file
 			let attachments = plan.attachmentCopies;
-			if (settings.copyAttachments) {
+			if (collector) {
 				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[1] : `Collecting attachments for ${file.basename}`);
-				const collector = new AttachmentCollector(this.app, exportedPaths);
 				const collectResult = await collector.collect([file]);
 				attachments = collectResult.attachments;
 				allWarnings.push(...collectResult.warnings);

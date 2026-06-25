@@ -21,6 +21,8 @@ export interface CollectResult {
 export class AttachmentCollector {
 	private app: App;
 	private exportedPaths: Set<string>;
+	private knownAttachments = new Map<string, AttachmentCopy>();
+	private usedNames = new Set<string>();
 
 	constructor(app: App, exportedPaths: Set<string>) {
 		this.app = app;
@@ -29,7 +31,6 @@ export class AttachmentCollector {
 
 	async collect(files: TFile[]): Promise<CollectResult> {
 		const seen = new Map<string, AttachmentCopy>();
-		const usedNames = new Set<string>();
 		const warnings: string[] = [];
 
 		for (const file of files) {
@@ -43,13 +44,7 @@ export class AttachmentCollector {
 
 					const targetFile = this.app.vault.getAbstractFileByPath(target);
 					if (isFileLike(targetFile) && targetFile.extension !== "md") {
-						if (!seen.has(target)) {
-							const outputName = this.uniqueName(targetFile, usedNames);
-							seen.set(target, {
-								sourcePath: target,
-								outputRelativePath: `assets/${outputName}`,
-							});
-						}
+						this.addAttachment(target, targetFile, seen);
 					}
 				}
 			}
@@ -61,18 +56,12 @@ export class AttachmentCollector {
 
 					const targetFile = this.app.vault.getAbstractFileByPath(target);
 					if (isFileLike(targetFile) && isAttachmentExt(targetFile.extension)) {
-						if (!seen.has(target)) {
-							const outputName = this.uniqueName(targetFile, usedNames);
-							seen.set(target, {
-								sourcePath: target,
-								outputRelativePath: `assets/${outputName}`,
-							});
-						}
+						this.addAttachment(target, targetFile, seen);
 					}
 				}
 			}
 
-			this.collectFromMarkdownImages(content, file.path, seen, usedNames, warnings);
+			this.collectFromMarkdownImages(content, file.path, seen, warnings);
 		}
 
 		return { attachments: Array.from(seen.values()), warnings };
@@ -82,7 +71,6 @@ export class AttachmentCollector {
 		content: string,
 		sourcePath: string,
 		seen: Map<string, AttachmentCopy>,
-		usedNames: Set<string>,
 		warnings: string[],
 	): void {
 		let match: RegExpExecArray | null;
@@ -102,15 +90,31 @@ export class AttachmentCollector {
 
 			const targetFile = this.app.vault.getAbstractFileByPath(target);
 			if (isFileLike(targetFile)) {
-				if (!seen.has(target)) {
-					const outputName = this.uniqueName(targetFile, usedNames);
-					seen.set(target, {
-						sourcePath: target,
-						outputRelativePath: `assets/${outputName}`,
-					});
-				}
+				this.addAttachment(target, targetFile, seen);
 			}
 		}
+	}
+
+	private addAttachment(
+		target: string,
+		targetFile: TFile,
+		seen: Map<string, AttachmentCopy>,
+	): void {
+		if (seen.has(target)) return;
+
+		const existing = this.knownAttachments.get(target);
+		if (existing) {
+			seen.set(target, existing);
+			return;
+		}
+
+		const outputName = this.uniqueName(targetFile, this.usedNames);
+		const attachment = {
+			sourcePath: target,
+			outputRelativePath: `assets/${outputName}`,
+		};
+		this.knownAttachments.set(target, attachment);
+		seen.set(target, attachment);
 	}
 
 	private resolveLink(link: string, sourcePath: string): string | null {

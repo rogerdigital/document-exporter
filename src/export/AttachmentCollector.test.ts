@@ -200,4 +200,34 @@ describe("AttachmentCollector", () => {
 		const uniquePaths = new Set(outputPaths);
 		expect(uniquePaths.size).toBe(3);
 	});
+
+	it("keeps unique attachment names across sequential collections", async () => {
+		const fileA: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
+		const fileB: MockFile = { path: "notes/b.md", extension: "md", name: "b.md" };
+
+		const app = createMockApp(
+			{
+				"notes/a.md": [{ link: "assets/image.png" }],
+				"notes/b.md": [{ link: "photos/image.png" }],
+			},
+		);
+
+		(app.vault.getAbstractFileByPath as ReturnType<typeof vi.fn>).mockImplementation((path: string) => {
+			if (path === "assets/image.png") return { path, extension: "png", name: "image.png" };
+			if (path === "photos/image.png") return { path, extension: "png", name: "image.png" };
+			return null;
+		});
+		(app.metadataCache.getFirstLinkpathDest as ReturnType<typeof vi.fn>).mockImplementation((link: string) => {
+			if (link === "assets/image.png") return { path: "assets/image.png" };
+			if (link === "photos/image.png") return { path: "photos/image.png" };
+			return null;
+		});
+
+		const collector = new AttachmentCollector(app as never, new Set());
+		const first = await collector.collect([fileA as never]);
+		const second = await collector.collect([fileB as never]);
+
+		expect(first.attachments[0].outputRelativePath).toBe("assets/image.png");
+		expect(second.attachments[0].outputRelativePath).toBe("assets/photos-image.png");
+	});
 });
