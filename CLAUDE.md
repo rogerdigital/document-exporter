@@ -33,12 +33,14 @@ src/
   export/              Core pipeline modules
     ExportSourceResolver.ts  Resolve files from source (current-file, folder, files, filter)
     ExportPlan.ts            Build and validate export plans
-    DocumentAssembler.ts     Read and combine markdown notes
-    AttachmentCollector.ts   Discover and deduplicate attachments
+    DocumentAssembler.ts     Read and combine markdown notes, strip frontmatter, derive title
+    AttachmentCollector.ts   Discover and deduplicate attachments (cross-file)
     LinkRewriter.ts          Rewrite wiki links, embeds, and image paths
     OutputWriter.ts          Write files and copy binaries via Vault API
+    utils.ts                 Shared helpers (extension lookup, path stripping)
     ExportRunner.ts          Orchestrate the full pipeline
   formats/             Output renderers
+    native-renderer.ts       Wrap Obsidian MarkdownRenderer (shared by HTML and PDF)
     markdown-bundle.ts       Combined document.md + assets/
     html-document.ts         Standalone index.html with TOC and CSS (also handles print-ready HTML)
     pdf.ts                   PDF export via browser window
@@ -61,6 +63,7 @@ src/
 - Commit messages: conventional commits (`feat:`, `fix:`, `chore:`, `docs:`)
 - No co-author or AI attribution in commits
 - Plugin directory in vault (`~/.obsidian/plugins/document-exporter/`) is a symlink to repo root — build artifacts are live after `npm run build`
+- **Never place a backup copy of the plugin inside `~/.obsidian/plugins/`**: Obsidian loads plugins by `manifest.json` `id`, so a second dir with the same id (e.g. `document-exporter.backup-...`) collides and one silently shadows the other. Keep backups outside `plugins/`, or remove their `manifest.json`.
 
 ## Release
 
