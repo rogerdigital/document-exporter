@@ -27,8 +27,6 @@ Multiple ways to start an export:
 
 ### Export dialog
 
-<img src="docs/screenshots/document-exporter-main-panel.png" width="560" />
-
 1. Choose **source** — current file, folder, or selected files
 2. Choose **format** — PDF, Word document, Markdown bundle, or HTML document
 3. Set **output folder** — type a path, click **Vault** to pick from vault folders, or **Choose folder** to select a system folder (desktop only)
