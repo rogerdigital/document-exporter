@@ -72,5 +72,5 @@ src/
 
 ## Key References
 
-- Development plan: `docs/plans/2026-05-10-document-exporter-development-plan.md`
+- Development plan (v0.1, archived): `docs/archives/2026-05-10-document-exporter-development-plan.md`
 - Obsidian plugin docs: https://docs.obsidian.md/Plugins/Getting%20started/Build%20a%20plugin
