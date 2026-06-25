@@ -188,7 +188,7 @@ describe("ExportRunner", () => {
 			);
 
 			// Attachment must land under the target folder, not the export root.
-			const destPaths = copySpy.mock.calls.map((c) => c[1] as string);
+			const destPaths = copySpy.mock.calls.map((c) => c[1]);
 			expect(destPaths).toContain("exports/notes/assets/img.png");
 			expect(destPaths).not.toContain("exports/assets/img.png");
 			copySpy.mockRestore();

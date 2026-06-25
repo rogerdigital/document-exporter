@@ -64,7 +64,7 @@ export class ProgressNotice {
 	}
 
 	private notifyWhenUnfocused(message: string): void {
-		if (typeof document === "undefined" || document.hasFocus()) return;
+		if (typeof activeDocument === "undefined" || activeDocument.hasFocus()) return;
 
 		try {
 			if (this.notifyViaWebNotification(message)) return;

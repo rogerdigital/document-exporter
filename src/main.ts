@@ -1,4 +1,4 @@
-import { Plugin, TFile, TFolder, Menu } from "obsidian";
+import { Plugin, TFile, TFolder, Menu, MenuItem } from "obsidian";
 import { ExportSettings } from "@/types";
 import { loadSettings, saveSettings } from "@/settings/settings";
 import { DocumentExporterSettingTab } from "@/settings/settings-tab";
@@ -7,6 +7,37 @@ import { ExportSourceResolver } from "@/export/ExportSourceResolver";
 import { ExportPlanBuilder, validatePlan } from "@/export/ExportPlan";
 import { ExportRunner, ExportProgressCallbacks, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
 import { ProgressNotice } from "@/ui/ProgressNotice";
+
+type NotebookNavigatorMenus = {
+	registerFileMenu?: (callback: (context: NotebookNavigatorFileContext) => void) => () => void;
+	registerFolderMenu?: (callback: (context: NotebookNavigatorFolderContext) => void) => () => void;
+};
+
+type NotebookNavigatorFileContext = {
+	selection?: { mode?: string };
+	file?: unknown;
+	addItem: (callback: (item: MenuItem) => void) => void;
+};
+
+type NotebookNavigatorFolderContext = {
+	folder?: unknown;
+	addItem: (callback: (item: MenuItem) => void) => void;
+};
+
+type AppWithPluginRegistry = typeof Plugin.prototype.app & {
+	plugins?: {
+		plugins?: Record<string, unknown>;
+	};
+};
+
+function isNotebookNavigatorMenus(value: unknown): value is NotebookNavigatorMenus {
+	if (!value || typeof value !== "object") return false;
+	const menus = value as NotebookNavigatorMenus;
+	return (
+		(typeof menus.registerFileMenu === "function" || typeof menus.registerFileMenu === "undefined")
+		&& (typeof menus.registerFolderMenu === "function" || typeof menus.registerFolderMenu === "undefined")
+	);
+}
 
 export default class DocumentExporterPlugin extends Plugin {
 	settings!: ExportSettings;
@@ -66,16 +97,15 @@ export default class DocumentExporterPlugin extends Plugin {
 	onunload() {}
 
 	private registerNotebookNavigatorMenus() {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const nnMenus = (this.app as any)?.plugins?.plugins?.["notebook-navigator"]?.api?.menus;
+		const nnMenus = this.getNotebookNavigatorMenus();
 		if (!nnMenus) return;
 
 		if (typeof nnMenus.registerFileMenu === "function") {
-			const dispose = nnMenus.registerFileMenu((context: any) => {
+			const dispose = nnMenus.registerFileMenu((context) => {
 				if (context.selection?.mode !== "single") return;
 				const file = context.file;
-				if (!file || !("extension" in file) || file.extension !== "md") return;
-				context.addItem((item: any) => {
+				if (!(file instanceof TFile) || file.extension !== "md") return;
+				context.addItem((item) => {
 					item.setTitle("Export this file")
 						.setIcon("file-output")
 						.onClick(() => this.openExportModal(file, undefined));
@@ -85,10 +115,10 @@ export default class DocumentExporterPlugin extends Plugin {
 		}
 
 		if (typeof nnMenus.registerFolderMenu === "function") {
-			const dispose = nnMenus.registerFolderMenu((context: any) => {
+			const dispose = nnMenus.registerFolderMenu((context) => {
 				const folder = context.folder;
-				if (!folder) return;
-				context.addItem((item: any) => {
+				if (!(folder instanceof TFolder)) return;
+				context.addItem((item) => {
 					item.setTitle("Export this folder")
 						.setIcon("file-output")
 						.onClick(() => this.openExportModal(undefined, folder));
@@ -96,6 +126,23 @@ export default class DocumentExporterPlugin extends Plugin {
 			});
 			this.register(() => dispose());
 		}
+	}
+
+	private getNotebookNavigatorMenus(): NotebookNavigatorMenus | null {
+		const app = this.app as AppWithPluginRegistry;
+		const registry = app.plugins?.plugins;
+		if (!registry) return null;
+
+		const notebookNavigator = registry["notebook-navigator"];
+		if (!notebookNavigator || typeof notebookNavigator !== "object") return null;
+
+		const api = (notebookNavigator as { api?: unknown }).api;
+		if (!api || typeof api !== "object") return null;
+
+		const menus = (api as { menus?: unknown }).menus;
+		if (!isNotebookNavigatorMenus(menus)) return null;
+
+		return menus;
 	}
 
 	async saveSettings() {
