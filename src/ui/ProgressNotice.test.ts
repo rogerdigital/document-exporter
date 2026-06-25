@@ -59,7 +59,7 @@ describe("ProgressNotice", () => {
 			value: window.document,
 			configurable: true,
 		});
-		Object.defineProperty(document, "hasFocus", {
+		Object.defineProperty(activeDocument, "hasFocus", {
 			value: () => true,
 			configurable: true,
 		});
@@ -130,7 +130,7 @@ describe("ProgressNotice", () => {
 			notify(title, options);
 		});
 		window.Notification.permission = "granted";
-		Object.defineProperty(document, "hasFocus", {
+		Object.defineProperty(activeDocument, "hasFocus", {
 			value: () => false,
 			configurable: true,
 		});
@@ -149,16 +149,17 @@ describe("ProgressNotice", () => {
 		window.Notification = { permission: "default" };
 		window.require = vi.fn((moduleId: string) => {
 			if (moduleId !== "electron") return undefined;
+			function TestNotification(options: { title: string; body?: string }): { show: () => void } {
+				notify(options);
+				return { show: vi.fn() };
+			}
 			return {
 				remote: {
-					Notification: vi.fn(function (options: { title: string; body?: string }) {
-						notify(options);
-						this.show = vi.fn();
-					}),
+					Notification: TestNotification,
 				},
 			};
 		});
-		Object.defineProperty(document, "hasFocus", {
+		Object.defineProperty(activeDocument, "hasFocus", {
 			value: () => false,
 			configurable: true,
 		});

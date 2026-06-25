@@ -412,6 +412,27 @@ function mimeFromExt(ext: string): string {
 
 export function encodeAttachmentDataUri(buffer: ArrayBuffer, ext: string): string {
 	const bytes = new Uint8Array(buffer);
-	const base64 = Buffer.from(bytes).toString("base64");
+	const base64 = encodeBase64(bytes);
 	return `data:${mimeFromExt(ext)};base64,${base64}`;
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	let output = "";
+
+	for (let i = 0; i < bytes.length; i += 3) {
+		const first = bytes[i];
+		const second = bytes[i + 1];
+		const third = bytes[i + 2];
+		const hasSecond = i + 1 < bytes.length;
+		const hasThird = i + 2 < bytes.length;
+		const value = (first << 16) | ((second ?? 0) << 8) | (third ?? 0);
+
+		output += alphabet[(value >> 18) & 0x3F];
+		output += alphabet[(value >> 12) & 0x3F];
+		output += hasSecond ? alphabet[(value >> 6) & 0x3F] : "=";
+		output += hasThird ? alphabet[value & 0x3F] : "=";
+	}
+
+	return output;
 }

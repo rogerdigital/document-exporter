@@ -91,9 +91,9 @@ async function collectImages(
 
 		try {
 			const file = app.vault.getAbstractFileByPath(att.sourcePath);
-			if (!file || !("extension" in file)) continue;
+			if (!(file instanceof TFile)) continue;
 
-			const buffer = await app.vault.readBinary(file as TFile);
+			const buffer = await app.vault.readBinary(file);
 			const data = new Uint8Array(buffer);
 			const ext = att.sourcePath.split(".").pop()?.toLowerCase() ?? "png";
 			const dims = readImageDimensions(data, ext);
@@ -379,7 +379,10 @@ function findImage(ref: string, imageMap: Map<string, DocxImage>): DocxImage | n
 			return img;
 		}
 	}
-	if (imageMap.size === 1) return imageMap.values().next().value!;
+	if (imageMap.size === 1) {
+		const onlyImage = imageMap.values().next();
+		return onlyImage.done ? null : onlyImage.value;
+	}
 	return null;
 }
 

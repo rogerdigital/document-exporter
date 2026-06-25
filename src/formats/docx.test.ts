@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
+import { TFile } from "obsidian";
 import { renderDocx } from "@/formats/docx";
 import { AssembledDocument, ExportPlan } from "@/types";
+
+function makeTFile(path: string, extension: string): TFile {
+	const file = new TFile();
+	file.path = path;
+	file.name = path.split("/").pop() ?? path;
+	file.basename = file.name.replace(new RegExp(`\\.${extension}$`), "");
+	file.extension = extension;
+	return file;
+}
 
 describe("DOCX rendering", () => {
 	it("writes a minimal DOCX package without external dependencies", async () => {
@@ -116,7 +126,7 @@ describe("DOCX rendering", () => {
 			vault: {
 				getAbstractFileByPath: vi.fn((path: string) => {
 					if (path === "assets/image.png") {
-						return { path, extension: "png", name: "image.png" };
+						return makeTFile(path, "png");
 					}
 					return null;
 				}),
@@ -163,7 +173,7 @@ describe("DOCX rendering", () => {
 			vault: {
 				getAbstractFileByPath: vi.fn((path: string) => {
 					if (path === "assets/wide.png") {
-						return { path, extension: "png", name: "wide.png" };
+						return makeTFile(path, "png");
 					}
 					return null;
 				}),
@@ -204,7 +214,7 @@ describe("DOCX rendering", () => {
 			vault: {
 				getAbstractFileByPath: vi.fn((path: string) => {
 					if (path === "assets/image.png") {
-						return { path, extension: "png", name: "image.png" };
+						return makeTFile(path, "png");
 					}
 					return null;
 				}),
@@ -247,7 +257,7 @@ describe("DOCX rendering", () => {
 			vault: {
 				getAbstractFileByPath: vi.fn((path: string) => {
 					if (path === "attachments/one.png" || path === "attachments/two.png") {
-						return { path, extension: "png", name: path.split("/").pop() };
+						return makeTFile(path, "png");
 					}
 					return null;
 				}),
