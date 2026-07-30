@@ -42,6 +42,12 @@ describe("OutputWriter", () => {
 			expect(writer.isExternal("C:\\Users\\docs")).toBe(true);
 		});
 
+		it("detects windows UNC paths", () => {
+			const app = createMockApp();
+			const writer = new OutputWriter(app as never);
+			expect(writer.isExternal("\\\\server\\share\\exports")).toBe(true);
+		});
+
 		it("returns false for relative paths", () => {
 			const app = createMockApp();
 			const writer = new OutputWriter(app as never);
@@ -130,6 +136,22 @@ describe("OutputWriter", () => {
 			const app = createMockApp();
 			const writer = new OutputWriter(app as never);
 			expect(writer.folderExists("nope")).toBe(false);
+		});
+	});
+
+	describe("pathExists", () => {
+		it("returns true for an existing vault file", () => {
+			const app = createMockApp({
+				"exports/note.pdf": { extension: "pdf" },
+			});
+			const writer = new OutputWriter(app as never);
+			expect(writer.pathExists("exports/note.pdf")).toBe(true);
+		});
+
+		it("returns false for a missing vault path", () => {
+			const app = createMockApp();
+			const writer = new OutputWriter(app as never);
+			expect(writer.pathExists("exports/missing.pdf")).toBe(false);
 		});
 	});
 

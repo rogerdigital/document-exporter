@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { ExportRunner, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
 import { OutputWriter } from "@/export/OutputWriter";
 
@@ -15,7 +15,7 @@ function createMockApp(files: string[]) {
 	return {
 		vault: {
 			getAbstractFileByPath: vi.fn((path: string) => fileMap.get(path) ?? null),
-			read: vi.fn(() => Promise.resolve("content")),
+			read: vi.fn((_file?: { path: string }) => Promise.resolve("content")),
 			getMarkdownFiles: vi.fn(() => []),
 			createFolder: vi.fn(),
 			create: vi.fn(),
@@ -26,6 +26,38 @@ function createMockApp(files: string[]) {
 		},
 		metadataCache: {
 			getFileCache: vi.fn(() => ({ frontmatter: {}, links: [], embeds: [] })),
+		},
+	};
+}
+
+function createPathAwareMockApp(
+	files: string[],
+	existingFolders: string[] = [],
+	existingFiles: string[] = [],
+) {
+	const pathMap = new Map<string, unknown>();
+	for (const path of files) pathMap.set(path, createFile(path));
+	for (const path of existingFolders) pathMap.set(path, { path, children: [] });
+	for (const path of existingFiles) pathMap.set(path, createFile(path));
+
+	return {
+		vault: {
+			getAbstractFileByPath: vi.fn((path: string) => pathMap.get(path) ?? null),
+			read: vi.fn((_file?: { path: string }) => Promise.resolve("content")),
+			getMarkdownFiles: vi.fn(() => []),
+			createFolder: vi.fn().mockResolvedValue(undefined),
+			create: vi.fn().mockResolvedValue(undefined),
+			modify: vi.fn().mockResolvedValue(undefined),
+			createBinary: vi.fn().mockResolvedValue(undefined),
+			modifyBinary: vi.fn().mockResolvedValue(undefined),
+			readBinary: vi.fn(() => Promise.resolve(new ArrayBuffer(0))),
+			adapter: {},
+		},
+		metadataCache: {
+			getFileCache: vi.fn(() => ({ frontmatter: {}, links: [], embeds: [] })),
+			getFirstLinkpathDest: vi.fn(
+				(_link?: string): ReturnType<typeof createFile> | null => null,
+			),
 		},
 	};
 }
@@ -41,12 +73,13 @@ function defaultSettings() {
 }
 
 function makePlan(files: string[]) {
+	const outputFilename = files[0]?.split("/").pop()?.replace(/\.md$/i, "") ?? "output";
 	return {
 		profile: "markdown-bundle" as const,
 		source: { type: "current-file" as const, path: files[0] },
 		inputFiles: files,
 		outputRoot: "exports",
-		outputFilename: "output",
+		outputFilename,
 		outputFolderName: undefined,
 		outputFiles: files.map((f) => `exports/${f.split("/").pop()}`),
 		attachmentCopies: [],
@@ -60,6 +93,10 @@ function makePdfPlan(files: string[]) {
 		outputFiles: files.map((f) => `exports/${f.split("/").pop()?.replace(/\\.md$/, ".pdf")}`),
 	};
 }
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
 
 describe("ExportRunner", () => {
 	describe("SINGLE_FILE_PHASES", () => {
@@ -192,6 +229,214 @@ describe("ExportRunner", () => {
 			expect(destPaths).toContain("exports/notes/assets/img.png");
 			expect(destPaths).not.toContain("exports/assets/img.png");
 			copySpy.mockRestore();
+		});
+	});
+
+	describe("output collisions", () => {
+		it("keeps the original root when the directory exists but the target file does not", async () => {
+			const app = createPathAwareMockApp(["note.md"], ["exports"]);
+			const runner = new ExportRunner(app as never);
+			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
+				.mockResolvedValue(undefined);
+
+			const result = await runner.run(makePlan(["note.md"]), defaultSettings());
+
+			expect(result.outputRoot).toBe("exports");
+			expect(writeSpy).toHaveBeenCalledWith(
+				"exports/note.md",
+				expect.any(String),
+			);
+		});
+
+		it("relocates the output file when the target already exists", async () => {
+			const app = createPathAwareMockApp(
+				["note.md"],
+				["exports"],
+				["exports/note.md"],
+			);
+			const runner = new ExportRunner(app as never);
+			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
+			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
+				.mockResolvedValue(undefined);
+
+			const result = await runner.run(makePlan(["note.md"]), defaultSettings());
+
+			expect(result.outputRoot).toBe("exports-2026-07-29");
+			expect(writeSpy).toHaveBeenCalledWith(
+				"exports-2026-07-29/note.md",
+				expect.any(String),
+			);
+			expect(writeSpy).not.toHaveBeenCalledWith(
+				"exports/note.md",
+				expect.any(String),
+			);
+		});
+
+		it("timestamps the batch leaf only when the actual batch target exists", async () => {
+			const plan = {
+				...makePlan(["notes/a.md"]),
+				source: { type: "folder" as const, path: "notes", recursive: true },
+				outputFolderName: "notes",
+				outputFiles: ["exports/notes/a.md"],
+			};
+			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
+			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
+				.mockResolvedValue(undefined);
+
+			const noConflictApp = createPathAwareMockApp(["notes/a.md"], ["exports"]);
+			const noConflictResult = await new ExportRunner(noConflictApp as never)
+				.run(plan, defaultSettings());
+			expect(noConflictResult.outputRoot).toBe("exports");
+			expect(writeSpy).toHaveBeenCalledWith(
+				"exports/notes/a.md",
+				expect.any(String),
+			);
+
+			writeSpy.mockClear();
+			const conflictApp = createPathAwareMockApp(
+				["notes/a.md"],
+				["exports", "exports/notes"],
+			);
+			await new ExportRunner(conflictApp as never).run(plan, defaultSettings());
+			expect(writeSpy).toHaveBeenCalledWith(
+				"exports/notes-2026-07-29/a.md",
+				expect.any(String),
+			);
+		});
+
+		it("treats a file at the batch target as a collision", async () => {
+			const app = createPathAwareMockApp(
+				["notes/a.md"],
+				["exports"],
+				["exports/notes"],
+			);
+			const plan = {
+				...makePlan(["notes/a.md"]),
+				source: { type: "folder" as const, path: "notes", recursive: true },
+				outputFolderName: "notes",
+				outputFiles: ["exports/notes/a.md"],
+			};
+			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
+			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
+				.mockResolvedValue(undefined);
+
+			await new ExportRunner(app as never).run(plan, defaultSettings());
+
+			expect(writeSpy).toHaveBeenCalledWith(
+				"exports/notes-2026-07-29/a.md",
+				expect.any(String),
+			);
+		});
+
+		it("increments the timestamped root when that candidate already exists", async () => {
+			const app = createPathAwareMockApp(
+				["note.md"],
+				["exports", "exports-2026-07-29"],
+				["exports/note.md"],
+			);
+			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
+			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
+				.mockResolvedValue(undefined);
+
+			const result = await new ExportRunner(app as never)
+				.run(makePlan(["note.md"]), defaultSettings());
+
+			expect(result.outputRoot).toBe("exports-2026-07-29-2");
+			expect(writeSpy).toHaveBeenCalledWith(
+				"exports-2026-07-29-2/note.md",
+				expect.any(String),
+			);
+		});
+
+		it("applies collision protection to external output paths", async () => {
+			const app = createPathAwareMockApp(["note.md"]);
+			const plan = {
+				...makePlan(["note.md"]),
+				outputRoot: "/tmp/exports",
+				outputFiles: ["/tmp/exports/note.md"],
+			};
+			vi.spyOn(OutputWriter.prototype, "pathExists")
+				.mockImplementation((path) => path === "/tmp/exports/note.md");
+			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
+			vi.spyOn(OutputWriter.prototype, "ensureFolder").mockResolvedValue(undefined);
+			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
+				.mockResolvedValue(undefined);
+
+			const result = await new ExportRunner(app as never).run(plan, defaultSettings());
+
+			expect(result.outputRoot).toBe("/tmp/exports-2026-07-29");
+			expect(writeSpy).toHaveBeenCalledWith(
+				"/tmp/exports-2026-07-29/note.md",
+				expect.any(String),
+			);
+		});
+
+		it("relocates attachments and warning reports with the output root", async () => {
+			const app = createPathAwareMockApp(
+				["note.md"],
+				["exports"],
+				["exports/note.md"],
+			);
+			app.vault.read.mockResolvedValue("[[Missing]]");
+			const plan = {
+				...makePlan(["note.md"]),
+				attachmentCopies: [
+					{ sourcePath: "images/picture.png", outputRelativePath: "assets/picture.png" },
+				],
+			};
+			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
+			const copySpy = vi.spyOn(OutputWriter.prototype, "copyBinaryFile")
+				.mockResolvedValue(undefined);
+			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
+				.mockResolvedValue(undefined);
+
+			await new ExportRunner(app as never).run(plan, defaultSettings());
+
+			expect(copySpy).toHaveBeenCalledWith(
+				"images/picture.png",
+				"exports-2026-07-29/assets/picture.png",
+			);
+			expect(writeSpy).toHaveBeenCalledWith(
+				"exports-2026-07-29/export-report.md",
+				expect.stringContaining("Unresolved link: Missing"),
+			);
+			expect(writeSpy).not.toHaveBeenCalledWith(
+				"exports/export-report.md",
+				expect.any(String),
+			);
+		});
+
+		it("uses relocated output paths when rewriting links in a batch", async () => {
+			const app = createPathAwareMockApp(
+				["notes/a.md", "notes/b.md"],
+				["exports", "exports/notes"],
+			);
+			app.vault.read.mockImplementation((file?: { path: string }) =>
+				Promise.resolve(file?.path === "notes/a.md" ? "[[b]]" : "content"),
+			);
+			app.metadataCache.getFirstLinkpathDest.mockImplementation((link?: string) =>
+				link === "b" ? createFile("notes/b.md") : null,
+			);
+			const plan = {
+				...makePlan(["notes/a.md", "notes/b.md"]),
+				source: { type: "folder" as const, path: "notes", recursive: true },
+				outputFolderName: "notes",
+				outputFiles: ["exports/notes/a.md", "exports/notes/b.md"],
+			};
+			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
+			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
+				.mockResolvedValue(undefined);
+
+			await new ExportRunner(app as never).run(plan, defaultSettings());
+
+			expect(writeSpy).toHaveBeenCalledWith(
+				"exports/notes-2026-07-29/a.md",
+				expect.stringContaining("[b](b.md)"),
+			);
+			expect(writeSpy).not.toHaveBeenCalledWith(
+				"exports/notes-2026-07-29/a.md",
+				expect.stringContaining("../notes/b.md"),
+			);
 		});
 	});
 });

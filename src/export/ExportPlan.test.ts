@@ -3,6 +3,7 @@ import {
 	validatePlan,
 	summarizePlan,
 	ExportPlanBuilder,
+	relocatePlan,
 } from "@/export/ExportPlan";
 import { ExportPlan, ExportSource } from "@/types";
 
@@ -73,6 +74,37 @@ describe("validatePlan", () => {
 		const result = validatePlan(plan);
 		expect(result).toBeNull();
 	});
+
+	it.each([
+		"../outside",
+		"nested/name",
+		"nested\\name",
+		".",
+		"..",
+		"bad:name",
+		"bad\u0000name",
+		"trailing.",
+		"trailing ",
+		"CON",
+		"con.txt",
+		"NUL",
+		"COM1",
+		"LPT9.log",
+	])("rejects unsafe output filename %j", (outputFilename) => {
+		const result = validatePlan(makePlan({ outputFilename }));
+		expect(result).toMatch(/file name/i);
+	});
+
+	it.each(["../outside", "nested/name", "nested\\name", ".", ".."])(
+		"rejects unsafe batch folder name %j",
+		(outputFolderName) => {
+			const result = validatePlan(makePlan({
+				source: { type: "folder", path: "notes", recursive: true },
+				outputFolderName,
+			}));
+			expect(result).toMatch(/folder name/i);
+		},
+	);
 });
 
 describe("summarizePlan", () => {
@@ -189,5 +221,30 @@ describe("ExportPlanBuilder", () => {
 			.build();
 
 		expect(plan.outputFiles).toEqual(["exports/my-note.md"]);
+	});
+});
+
+describe("relocatePlan", () => {
+	it("recomputes a single output file from the new root", () => {
+		const relocated = relocatePlan(makePlan(), "exports-2026-07-29");
+
+		expect(relocated.outputRoot).toBe("exports-2026-07-29");
+		expect(relocated.outputFiles).toEqual(["exports-2026-07-29/document.md"]);
+	});
+
+	it("recomputes batch output files from the new leaf folder", () => {
+		const plan = makePlan({
+			source: { type: "folder", path: "notes", recursive: true },
+			inputFiles: ["notes/a.md", "notes/nested/b.md"],
+			outputFolderName: "notes",
+			outputFiles: ["exports/notes/a.md", "exports/notes/nested/b.md"],
+		});
+
+		const relocated = relocatePlan(plan, "exports", "notes-2026-07-29");
+
+		expect(relocated.outputFiles).toEqual([
+			"exports/notes-2026-07-29/a.md",
+			"exports/notes-2026-07-29/nested/b.md",
+		]);
 	});
 });

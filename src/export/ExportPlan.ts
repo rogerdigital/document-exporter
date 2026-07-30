@@ -2,6 +2,72 @@ import { ExportPlan, ExportProfileId, ExportSource } from "@/types";
 import { App } from "obsidian";
 import { extensionForProfile, longestCommonDirPrefix } from "@/export/utils";
 
+const INVALID_OUTPUT_NAME_RE = /[<>:"/\\|?*]/;
+const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+
+export function validateOutputLeafName(
+	value: string,
+	label: "File name" | "Folder name",
+): string | null {
+	const trimmed = value.trim();
+	const hasControlCharacter = Array.from(trimmed)
+		.some((character) => character.charCodeAt(0) <= 0x1F);
+	if (!trimmed) return `${label} cannot be empty.`;
+	if (
+		trimmed !== value
+		|| trimmed === "."
+		|| trimmed === ".."
+		|| trimmed.endsWith(".")
+		|| INVALID_OUTPUT_NAME_RE.test(trimmed)
+		|| hasControlCharacter
+		|| WINDOWS_RESERVED_NAME_RE.test(trimmed)
+	) {
+		return `${label} contains invalid path characters.`;
+	}
+	return null;
+}
+
+type OutputLayout = Pick<
+	ExportPlan,
+	"profile" | "source" | "inputFiles" | "outputRoot" | "outputFilename" | "outputFolderName"
+>;
+
+export function computeOutputFiles(layout: OutputLayout): string[] {
+	const ext = extensionForProfile(layout.profile);
+
+	if (layout.source.type === "current-file") {
+		const baseName = layout.outputFilename.replace(/\.(md|html|htm|pdf|docx)$/i, "");
+		return [`${layout.outputRoot}/${baseName}.${ext}`];
+	}
+
+	const root = layout.outputFolderName
+		? `${layout.outputRoot}/${layout.outputFolderName}`
+		: layout.outputRoot;
+
+	if (layout.source.type === "folder") {
+		const prefix = layout.source.path ? `${layout.source.path}/` : "";
+		return layout.inputFiles.map((path) => {
+			const relative = prefix && path.startsWith(prefix) ? path.slice(prefix.length) : path;
+			return `${root}/${relative.replace(/\.md$/i, `.${ext}`)}`;
+		});
+	}
+
+	const prefix = longestCommonDirPrefix(layout.inputFiles);
+	return layout.inputFiles.map((path) => {
+		const relative = prefix && path.startsWith(prefix) ? path.slice(prefix.length) : path;
+		return `${root}/${relative.replace(/\.md$/i, `.${ext}`)}`;
+	});
+}
+
+export function relocatePlan(
+	plan: ExportPlan,
+	outputRoot: string,
+	outputFolderName = plan.outputFolderName,
+): ExportPlan {
+	const relocated = { ...plan, outputRoot, outputFolderName };
+	return { ...relocated, outputFiles: computeOutputFiles(relocated) };
+}
+
 export class ExportPlanBuilder {
 	private app: App;
 	private source: ExportSource;
@@ -40,41 +106,16 @@ export class ExportPlanBuilder {
 			outputRoot: this.outputRoot,
 			outputFilename: this.outputFilename,
 			outputFolderName: this.outputFolderName,
-			outputFiles: this.computeOutputFiles(),
+			outputFiles: computeOutputFiles({
+				profile: this.profile,
+				source: this.source,
+				inputFiles: this.inputFiles,
+				outputRoot: this.outputRoot,
+				outputFilename: this.outputFilename,
+				outputFolderName: this.outputFolderName,
+			}),
 			attachmentCopies: [],
 		};
-	}
-
-	private computeOutputFiles(): string[] {
-		const ext = extensionForProfile(this.profile);
-
-		if (this.source.type === "current-file") {
-			const baseName = this.stripExtension(this.outputFilename);
-			return [`${this.outputRoot}/${baseName}.${ext}`];
-		}
-
-		const root = this.outputFolderName
-			? `${this.outputRoot}/${this.outputFolderName}`
-			: this.outputRoot;
-
-		if (this.source.type === "folder") {
-			const prefix = this.source.path ? this.source.path + "/" : "";
-			return this.inputFiles.map(p => {
-				const rel = prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
-				return `${root}/${rel.replace(/\.md$/i, `.${ext}`)}`;
-			});
-		}
-
-		// files: strip longest common directory prefix
-		const prefix = longestCommonDirPrefix(this.inputFiles);
-		return this.inputFiles.map(p => {
-			const rel = prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
-			return `${root}/${rel.replace(/\.md$/i, `.${ext}`)}`;
-		});
-	}
-
-	private stripExtension(name: string): string {
-		return name.replace(/\.(md|html|htm|pdf|docx)$/i, "");
 	}
 }
 
@@ -88,6 +129,13 @@ export function validatePlan(plan: ExportPlan): string | null {
 	const segments = plan.outputRoot.split("/");
 	if (segments.some(s => s === ".." || s === ".")) {
 		return "Output folder cannot use parent directory traversal.";
+	}
+	const filenameError = validateOutputLeafName(plan.outputFilename, "File name");
+	if (filenameError) return filenameError;
+
+	if (plan.source.type !== "current-file" && plan.outputFolderName !== undefined) {
+		const folderError = validateOutputLeafName(plan.outputFolderName, "Folder name");
+		if (folderError) return folderError;
 	}
 	return null;
 }
