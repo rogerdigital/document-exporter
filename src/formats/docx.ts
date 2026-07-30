@@ -10,6 +10,8 @@ type DocxRun = {
 	emoji?: boolean;
 	drawing?: string;
 	break?: boolean;
+	hyperlink?: string;
+	relationshipId?: string;
 };
 
 type DocxParagraph = {
@@ -41,6 +43,11 @@ type DocxImage = {
 	ext: string;
 };
 
+type DocxHyperlink = {
+	target: string;
+	rId: string;
+};
+
 type ZipEntry = {
 	name: string;
 	data: Uint8Array;
@@ -64,6 +71,7 @@ export async function renderDocx(
 
 	const images = await collectImages(doc.attachments, app, warnings);
 	const blocks = buildDocxBlocks(doc, images);
+	const hyperlinks = assignHyperlinkRelationships(blocks, images.length + 2);
 	const documentXml = buildDocumentXml(blocks);
 
 	const files: { name: string; data: Uint8Array }[] = [
@@ -73,8 +81,11 @@ export async function renderDocx(
 		{ name: "word/styles.xml", data: encodeXml(STYLES_XML) },
 	];
 
-	if (images.length > 0) {
-		files.push({ name: "word/_rels/document.xml.rels", data: encodeXml(buildRels(images)) });
+	if (images.length > 0 || hyperlinks.length > 0) {
+		files.push({
+			name: "word/_rels/document.xml.rels",
+			data: encodeXml(buildRels(images, hyperlinks)),
+		});
 		for (const img of images) {
 			files.push({ name: img.mediaPath, data: img.data });
 		}
@@ -272,12 +283,12 @@ function parseMarkdownToBlocks(markdown: string, imageMap: Map<string, DocxImage
 			continue;
 		}
 
-		if (/^[\s]*\d+\.\s/.test(line)) {
-			const text = line.replace(/^[\s]*\d+\.\s/, "");
+		const orderedMatch = line.match(/^[\s]*(\d+)\.\s+(.+)$/);
+		if (orderedMatch) {
 			blocks.push({
 				kind: "paragraph",
 				style: "ListParagraph",
-				runs: parseInline(text, imageMap),
+				runs: parseInline(`${orderedMatch[1]}. ${orderedMatch[2]}`, imageMap),
 			});
 			i++;
 			continue;
@@ -355,7 +366,8 @@ function buildTable(
 
 function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] {
 	const runs: DocxRun[] = [];
-	const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))|(!\[([^\]]*)\]\(([^)]+)\))/g;
+	const regex =
+		/(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\))|(!\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\))/g;
 	let lastIndex = 0;
 	let match: RegExpExecArray | null;
 
@@ -372,7 +384,7 @@ function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] 
 			runs.push(createTextRun(match[6], { code: true }));
 		} else if (match[10]) {
 			const altText = match[11] || "image";
-			const imgRef = match[12];
+			const imgRef = unwrapMarkdownDestination(match[12]);
 			const img = findImage(imgRef, imageMap);
 			if (img) {
 				runs.push({ text: "", drawing: buildDrawingXml(img, altText) });
@@ -380,7 +392,9 @@ function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] 
 				runs.push(createTextRun(`[Image: ${altText}]`, { italics: true }));
 			}
 		} else if (match[7]) {
-			runs.push(createTextRun(match[8]));
+			runs.push(createTextRun(match[8], {
+				hyperlink: unwrapMarkdownDestination(match[9]),
+			}));
 		}
 
 		lastIndex = match.index + match[0].length;
@@ -391,6 +405,12 @@ function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] 
 	}
 
 	return runs.length > 0 ? runs : [createTextRun(text)];
+}
+
+function unwrapMarkdownDestination(value: string): string {
+	return value.startsWith("<") && value.endsWith(">")
+		? value.slice(1, -1)
+		: value;
 }
 
 function createTextRun(text: string, options: Omit<DocxRun, "text" | "drawing" | "emoji"> = {}): DocxRun {
@@ -444,6 +464,39 @@ function parseTableRow(line: string): string[] {
 	return line.split("|").slice(1, -1).map((cell) => cell.trim());
 }
 
+function assignHyperlinkRelationships(
+	blocks: DocxBlock[],
+	startingId: number,
+): DocxHyperlink[] {
+	const hyperlinks: DocxHyperlink[] = [];
+	const relationshipIds = new Map<string, string>();
+
+	const assign = (run: DocxRun) => {
+		if (!run.hyperlink || run.hyperlink.startsWith("#")) return;
+		let rId = relationshipIds.get(run.hyperlink);
+		if (!rId) {
+			rId = `rId${startingId + hyperlinks.length}`;
+			relationshipIds.set(run.hyperlink, rId);
+			hyperlinks.push({ target: run.hyperlink, rId });
+		}
+		run.relationshipId = rId;
+	};
+
+	for (const block of blocks) {
+		if (block.kind === "paragraph") {
+			block.runs.forEach(assign);
+		} else {
+			for (const row of block.rows) {
+				for (const cell of row) {
+					cell.runs.forEach(assign);
+				}
+			}
+		}
+	}
+
+	return hyperlinks;
+}
+
 function buildDocumentXml(blocks: DocxBlock[]): string {
 	const body = blocks.map(blockToXml).join("");
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -481,6 +534,22 @@ function paragraphToXml(paragraph: DocxParagraph): string {
 }
 
 function runToXml(run: DocxRun): string {
+	if (run.hyperlink?.startsWith("#")) {
+		const textRun = runToXml({
+			...run,
+			hyperlink: undefined,
+			relationshipId: undefined,
+		});
+		return `<w:hyperlink w:anchor="${escapeXml(run.hyperlink.slice(1))}">${textRun}</w:hyperlink>`;
+	}
+	if (run.hyperlink && run.relationshipId) {
+		const textRun = runToXml({
+			...run,
+			hyperlink: undefined,
+			relationshipId: undefined,
+		});
+		return `<w:hyperlink r:id="${run.relationshipId}">${textRun}</w:hyperlink>`;
+	}
 	if (run.drawing) {
 		return `<w:r>${run.drawing}</w:r>`;
 	}
@@ -516,15 +585,19 @@ ${imageEntries}
 </Types>`;
 }
 
-function buildRels(images: DocxImage[]): string {
+function buildRels(images: DocxImage[], hyperlinks: DocxHyperlink[]): string {
 	const rels = images.map(img =>
 		`<Relationship Id="${img.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${img.mediaPath.replace("word/", "")}"/>`
+	).join("");
+	const hyperlinkRels = hyperlinks.map((link) =>
+		`<Relationship Id="${link.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escapeXml(link.target)}" TargetMode="External"/>`
 	).join("");
 
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 ${rels}
+${hyperlinkRels}
 </Relationships>`;
 }
 

@@ -124,6 +124,34 @@ describe("DOCX rendering", () => {
 		expect(documentXml).not.toMatch(/<w:p[^>]*>\s*<w:tc>/);
 	});
 
+	it("preserves explicit ordered-list markers", async () => {
+		const xml = await renderAndReadDocumentXml("1. First\n2. Second");
+		expect(xml).toContain(">1. First<");
+		expect(xml).toContain(">2. Second<");
+	});
+
+	it("emits hyperlink relationships and clickable runs", async () => {
+		const result = await renderAndReadDocxPackage(
+			"[Example](https://example.com) and [Other](other.docx)",
+		);
+		const relationshipsXml = result.relationshipsXml ?? "";
+
+		expect(result.documentXml).toContain("<w:hyperlink");
+		expect(relationshipsXml).toContain('Target="https://example.com"');
+		expect(relationshipsXml).toContain('Target="other.docx"');
+		expect(relationshipsXml).toContain('TargetMode="External"');
+	});
+
+	it("keeps an optional markdown title out of the hyperlink target", async () => {
+		const result = await renderAndReadDocxPackage(
+			'[Example](https://example.com "caption")',
+		);
+		const relationshipsXml = result.relationshipsXml ?? "";
+
+		expect(relationshipsXml).toContain('Target="https://example.com"');
+		expect(relationshipsXml).not.toContain("caption");
+	});
+
 	it("writes a minimal DOCX package without external dependencies", async () => {
 		let writtenPath = "";
 		let writtenData: Uint8Array | null = null;
