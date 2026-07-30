@@ -4,7 +4,9 @@ import { normalizePath, extractCodeBlocks, restoreCodeBlocks, relativePathBetwee
 
 const WIKI_LINK_RE = /\[\[([^\]]+)]]/g;
 const WIKI_EMBED_RE = /!\[\[([^\]]+)]]/g;
-const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g;
+const MARKDOWN_INLINE_LINK_RE =
+	/(!?)\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
+const EMBED_PLACEHOLDER = "\uE000WE";
 
 export interface RewriteResult {
 	markdown: string;
@@ -44,27 +46,87 @@ export class LinkRewriter {
 		const warnings: string[] = [];
 
 		const { text, blocks } = extractCodeBlocks(markdown);
+		const embedReplacements: string[] = [];
 
-		// Rewrite embedded attachments: ![[image.png]]
+		// Protect every embed result from the later wiki and Markdown link passes.
 		let result = text.replace(WIKI_EMBED_RE, (match, link: string) => {
-			const cleanLink = link.split("|")[0].split("#")[0];
-			const dest = this.resolvePath(cleanLink, sourcePath);
-			if (!dest) return match;
+			const [rawTarget, alias] = link.split("|");
+			const [target, heading] = rawTarget.split("#");
+			const displayText = alias || target;
+			const dest = this.resolvePath(target, sourcePath);
+			if (!dest) {
+				warnings.push(`Unresolved embed: ${target}`);
+				return storeReplacement(embedReplacements, match);
+			}
 
 			const attachment = this.attachments.get(dest);
 			if (attachment) {
 				const relPath = this.rewriteAttachmentPath(attachment.outputRelativePath);
-				return this.formatEmbed(relPath, cleanLink);
+				return storeReplacement(
+					embedReplacements,
+					this.formatEmbed(relPath, target),
+				);
 			}
 
-			// If it's an included markdown note, leave as link anchor
 			if (this.exportedPaths.has(dest)) {
-				return match;
+				return storeReplacement(
+					embedReplacements,
+					this.formatExportedNoteLink(dest, displayText, target, heading),
+				);
 			}
 
-			warnings.push(`Unresolved embed: ${cleanLink}`);
-			return match;
+			if (dest.toLowerCase().endsWith(".md")) {
+				return storeReplacement(embedReplacements, `[[${link}]]`);
+			}
+
+			warnings.push(`Unresolved embed: ${target}`);
+			return storeReplacement(embedReplacements, match);
 		});
+
+		// Rewrite standard inline links and images before generating Markdown
+		// links from wiki syntax, so generated output is not processed twice.
+		result = result.replace(
+			MARKDOWN_INLINE_LINK_RE,
+			(
+				match,
+				imagePrefix: string,
+				label: string,
+				hrefToken: string,
+				titleSuffix = "",
+			) => {
+				const wrapped = hrefToken.startsWith("<") && hrefToken.endsWith(">");
+				const href = wrapped ? hrefToken.slice(1, -1) : hrefToken;
+				if (isExternalOrFragmentLink(href)) return match;
+
+				const [target, heading] = href.split("#");
+				const dest = this.resolvePath(target, sourcePath);
+				if (dest && this.exportedPaths.has(dest)) {
+					const destination = this.exportedNoteDestination(
+						dest,
+						target,
+						heading,
+					);
+					return `${imagePrefix}[${label}](${destination}${titleSuffix})`;
+				}
+
+				const relativeDest = this.resolveRelativePath(target, sourcePath);
+				const attachmentDest = dest && this.attachments.has(dest)
+					? dest
+					: relativeDest;
+				const attachment = attachmentDest
+					? this.attachments.get(attachmentDest)
+					: undefined;
+				if (attachment) {
+					const rewrittenPath = this.rewriteAttachmentPath(
+						attachment.outputRelativePath,
+					);
+					return `${imagePrefix}[${label}](${rewrittenPath}${titleSuffix})`;
+				}
+
+				warnings.push(`Unresolved local link: ${href}`);
+				return match;
+			},
+		);
 
 		// Rewrite wiki links: [[Note]] or [[Note|Alias]]
 		result = result.replace(WIKI_LINK_RE, (match, link: string) => {
@@ -79,18 +141,7 @@ export class LinkRewriter {
 			}
 
 			if (this.exportedPaths.has(dest)) {
-				// Link to another exported file -> relative path
-				const targetOutput = this.outputPathMap.get(dest);
-				if (targetOutput && this.currentOutputPath) {
-					const relPath = relativePathBetween(this.currentOutputPath, targetOutput);
-					const hash = heading ? `#${slugify(heading)}` : "";
-					return `[${displayText}](${relPath}${hash})`;
-				}
-				// Fallback: anchor (single-file mode)
-				const anchor = heading
-					? `#${slugify(target)}-${slugify(heading)}`
-					: `#${slugify(target)}`;
-				return `[${displayText}](${anchor})`;
+				return this.formatExportedNoteLink(dest, displayText, target, heading);
 			}
 
 			const attachment = this.attachments.get(dest);
@@ -102,23 +153,7 @@ export class LinkRewriter {
 			return displayText;
 		});
 
-		// Rewrite markdown image links: ![alt](path)
-		result = result.replace(MARKDOWN_IMAGE_RE, (match, alt: string, href: string) => {
-			if (href.startsWith("http://") || href.startsWith("https://")) {
-				return match;
-			}
-
-			const resolved = this.resolveRelativePath(href, sourcePath);
-			if (!resolved) return match;
-
-			const attachment = this.attachments.get(resolved);
-			if (attachment) {
-				return `![${alt}](${this.rewriteAttachmentPath(attachment.outputRelativePath)})`;
-			}
-
-			return match;
-		});
-
+		result = restoreReplacements(result, embedReplacements);
 		result = restoreCodeBlocks(result, blocks);
 
 		return { markdown: result, warnings };
@@ -142,18 +177,44 @@ export class LinkRewriter {
 		return file ? normalized : null;
 	}
 
-	private rewriteAttachmentPath(attRelativePath: string): string {
-			if (!this.currentOutputPath || !this.outputRoot) return attRelativePath;
-			// attRelativePath is relative to outputRoot (e.g., "assets/image.png")
-			// currentOutputPath is e.g., "exports/a/note1.pdf", outputRoot is "exports"
-			// We need the relative path from the output file's directory to the attachment
-			const dirAfterRoot = this.currentOutputPath.startsWith(this.outputRoot + "/")
-				? this.currentOutputPath.slice(this.outputRoot.length + 1)
-				: this.currentOutputPath;
-			const depth = dirAfterRoot.split("/").length - 1; // -1 for the filename
-			if (depth <= 0) return attRelativePath;
-			return "../".repeat(depth) + attRelativePath;
+	private formatExportedNoteLink(
+		dest: string,
+		displayText: string,
+		target: string,
+		heading?: string,
+	): string {
+		return `[${displayText}](${this.exportedNoteDestination(dest, target, heading)})`;
+	}
+
+	private exportedNoteDestination(
+		dest: string,
+		target: string,
+		heading?: string,
+	): string {
+		const targetOutput = this.outputPathMap.get(dest);
+		if (targetOutput && this.currentOutputPath) {
+			const relPath = relativePathBetween(this.currentOutputPath, targetOutput);
+			const hash = heading ? `#${slugify(heading)}` : "";
+			return `${relPath}${hash}`;
 		}
+
+		return heading
+			? `#${slugify(target)}-${slugify(heading)}`
+			: `#${slugify(target)}`;
+	}
+
+	private rewriteAttachmentPath(attRelativePath: string): string {
+		if (!this.currentOutputPath || !this.outputRoot) return attRelativePath;
+		// attRelativePath is relative to outputRoot (e.g., "assets/image.png")
+		// currentOutputPath is e.g., "exports/a/note1.pdf", outputRoot is "exports"
+		// We need the relative path from the output file's directory to the attachment
+		const dirAfterRoot = this.currentOutputPath.startsWith(this.outputRoot + "/")
+			? this.currentOutputPath.slice(this.outputRoot.length + 1)
+			: this.currentOutputPath;
+		const depth = dirAfterRoot.split("/").length - 1; // -1 for the filename
+		if (depth <= 0) return attRelativePath;
+		return "../".repeat(depth) + attRelativePath;
+	}
 
 	private formatEmbed(relPath: string, link: string): string {
 		const ext = relPath.split(".").pop()?.toLowerCase() ?? "";
@@ -184,6 +245,22 @@ export class LinkRewriter {
 		// is not rendered as an image by Obsidian and many Markdown viewers.
 		return `![${link}](${relPath})`;
 	}
+}
+
+function storeReplacement(values: string[], value: string): string {
+	values.push(value);
+	return `${EMBED_PLACEHOLDER}${values.length - 1}${EMBED_PLACEHOLDER}`;
+}
+
+function restoreReplacements(text: string, values: string[]): string {
+	return text.replace(
+		new RegExp(`${EMBED_PLACEHOLDER}(\\d+)${EMBED_PLACEHOLDER}`, "g"),
+		(_match, index: string) => values[Number(index)],
+	);
+}
+
+function isExternalOrFragmentLink(href: string): boolean {
+	return /^(?:https?:|mailto:|data:|#)/i.test(href);
 }
 
 function isImageExtension(ext: string): boolean {
