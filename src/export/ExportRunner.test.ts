@@ -1,5 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { ExportRunner, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
+import { AttachmentCollector } from "@/export/AttachmentCollector";
 import { OutputWriter } from "@/export/OutputWriter";
 import { Platform } from "obsidian";
 
@@ -140,6 +141,65 @@ describe("ExportRunner", () => {
 	});
 
 	describe("cancel", () => {
+		it("stops before the next attachment after cancellation", async () => {
+			const app = createMockApp(["a.md"]);
+			const plan = {
+				...makePlan(["a.md"]),
+				attachmentCopies: [
+					{ sourcePath: "one.png", outputRelativePath: "assets/one.png" },
+					{ sourcePath: "two.png", outputRelativePath: "assets/two.png" },
+				],
+			};
+			const runner = new ExportRunner(app as never);
+			const copySpy = vi.spyOn(OutputWriter.prototype, "copyBinaryFile")
+				.mockImplementationOnce(async () => {
+					runner.cancel();
+				})
+				.mockResolvedValue(undefined);
+
+			const result = await runner.run(plan, defaultSettings());
+
+			expect(copySpy).toHaveBeenCalledTimes(1);
+			expect(result.success).toBe(false);
+			expect(result.warnings[0]).toContain("cancelled");
+		});
+
+		it("reports partial success when cancellation happens after an earlier file", async () => {
+			const app = createMockApp(["a.md", "b.md"]);
+			const plan = makePlan(["a.md", "b.md"]);
+			const runner = new ExportRunner(app as never);
+			vi.spyOn(AttachmentCollector.prototype, "collect")
+				.mockResolvedValueOnce({
+					attachments: [
+						{ sourcePath: "a-one.png", outputRelativePath: "assets/a-one.png" },
+						{ sourcePath: "a-two.png", outputRelativePath: "assets/a-two.png" },
+					],
+					warnings: [],
+				})
+				.mockResolvedValueOnce({
+					attachments: [
+						{ sourcePath: "b-one.png", outputRelativePath: "assets/b-one.png" },
+						{ sourcePath: "b-two.png", outputRelativePath: "assets/b-two.png" },
+					],
+					warnings: [],
+				});
+			let copies = 0;
+			const copySpy = vi.spyOn(OutputWriter.prototype, "copyBinaryFile")
+				.mockImplementation(async () => {
+					copies++;
+					if (copies === 3) runner.cancel();
+				});
+
+			const result = await runner.run(
+				plan,
+				{ ...defaultSettings(), copyAttachments: true },
+			);
+
+			expect(copySpy).toHaveBeenCalledTimes(3);
+			expect(result.success).toBe(true);
+			expect(result.warnings[0]).toContain("1 of 2 file(s) exported");
+		});
+
 		it("returns partial success when cancelled after some files", async () => {
 			const app = createMockApp(["a.md", "b.md", "c.md"]);
 			const plan = makePlan(["a.md", "b.md", "c.md"]);

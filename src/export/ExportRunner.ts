@@ -188,7 +188,13 @@ export class ExportRunner {
 			if (doc.attachments.length > 0) {
 				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[4] : `Copying attachments for ${file.basename}`);
 				await writer.ensureFolder(`${assetsRoot}/assets`);
+				if (this.cancelled) {
+					return this.cancelledResult(outputRoot, completedFiles, files.length);
+				}
 				for (const att of doc.attachments) {
+					if (this.cancelled) {
+						return this.cancelledResult(outputRoot, completedFiles, files.length);
+					}
 					if (copiedAttachments.has(att.outputRelativePath)) continue;
 					copiedAttachments.add(att.outputRelativePath);
 					try {

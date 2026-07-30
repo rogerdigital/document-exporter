@@ -26,6 +26,16 @@ export type ExportModalResult = {
 	outputFolderName?: string;
 };
 
+export function deriveDefaultFilename(
+	app: App,
+	preselectedFile?: TFile,
+	preselectedFolder?: TFolder,
+): string {
+	if (preselectedFile) return preselectedFile.basename;
+	if (preselectedFolder) return preselectedFolder.name;
+	return app.workspace.getActiveFile()?.basename ?? "export";
+}
+
 export class ExportModal extends Modal {
 	private settings: ExportSettings;
 	private resolve: ((result: ExportModalResult | null) => void) | null = null;
@@ -42,14 +52,18 @@ export class ExportModal extends Modal {
 	constructor(app: App, settings: ExportSettings, preselectedFile?: TFile, preselectedFolder?: TFolder) {
 		super(app);
 		this.settings = settings;
+		this.preselectedFile = preselectedFile;
+		this.preselectedFolder = preselectedFolder;
 		this.profile = resolveSupportedProfile(
 			settings.defaultProfile,
 			Platform.isDesktopApp,
 		);
 		this.outputFolder = settings.defaultOutputFolder;
-		this.outputFilename = this.deriveDefaultFilename();
-		this.preselectedFile = preselectedFile;
-		this.preselectedFolder = preselectedFolder;
+		this.outputFilename = deriveDefaultFilename(
+			app,
+			preselectedFile,
+			preselectedFolder,
+		);
 	}
 
 	onOpen(): void {
@@ -313,20 +327,6 @@ export class ExportModal extends Modal {
 			this.close();
 			resolveRef?.(result);
 		});
-	}
-
-	private deriveDefaultFilename(): string {
-		if (this.preselectedFile) {
-			return this.preselectedFile.basename;
-		}
-		if (this.preselectedFolder) {
-			return this.preselectedFolder.name;
-		}
-		const activeFile = this.app.workspace.getActiveFile();
-		if (activeFile) {
-			return activeFile.basename;
-		}
-		return "export";
 	}
 
 	private updateDefaultFolderName(): void {
