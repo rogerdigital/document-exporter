@@ -12,7 +12,118 @@ function makeTFile(path: string, extension: string): TFile {
 	return file;
 }
 
+function readStoredZipEntry(data: Uint8Array, targetName: string): string {
+	const decoder = new TextDecoder();
+	let offset = 0;
+
+	while (offset + 30 <= data.byteLength) {
+		const view = new DataView(
+			data.buffer,
+			data.byteOffset + offset,
+			data.byteLength - offset,
+		);
+		const signature = view.getUint32(0, true);
+		if (signature !== 0x04034b50) break;
+
+		const compressionMethod = view.getUint16(8, true);
+		const compressedSize = view.getUint32(18, true);
+		const nameLength = view.getUint16(26, true);
+		const extraLength = view.getUint16(28, true);
+		const nameStart = offset + 30;
+		const nameEnd = nameStart + nameLength;
+		const contentStart = nameEnd + extraLength;
+		const contentEnd = contentStart + compressedSize;
+
+		if (contentEnd > data.byteLength) {
+			throw new Error(`Invalid ZIP entry bounds for ${targetName}`);
+		}
+
+		const name = decoder.decode(data.slice(nameStart, nameEnd));
+		if (name === targetName) {
+			if (compressionMethod !== 0) {
+				throw new Error(`Expected stored ZIP entry for ${targetName}`);
+			}
+			return decoder.decode(data.slice(contentStart, contentEnd));
+		}
+
+		offset = contentEnd;
+	}
+
+	throw new Error(`ZIP entry not found: ${targetName}`);
+}
+
+async function renderAndReadDocxPackage(markdown: string): Promise<{
+	documentXml: string;
+	relationshipsXml: string | null;
+}> {
+	let writtenData: Uint8Array | null = null;
+	const writer = {
+		ensureFolder: vi.fn().mockResolvedValue(undefined),
+		writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+			writtenData = data;
+			return Promise.resolve();
+		}),
+	};
+	const doc: AssembledDocument = {
+		title: "Fixture",
+		sections: [{
+			sourcePath: "fixture.md",
+			title: "Fixture",
+			markdown,
+			frontmatter: {},
+		}],
+		attachments: [],
+	};
+	const plan = {
+		outputRoot: "output",
+		outputFilename: "fixture.docx",
+	} as ExportPlan;
+
+	await renderDocx(doc, plan, writer as never, null);
+	if (!writtenData) throw new Error("DOCX was not written");
+
+	let relationshipsXml: string | null = null;
+	try {
+		relationshipsXml = readStoredZipEntry(
+			writtenData,
+			"word/_rels/document.xml.rels",
+		);
+	} catch (error) {
+		if (!(error instanceof Error) || !error.message.startsWith("ZIP entry not found:")) {
+			throw error;
+		}
+	}
+
+	return {
+		documentXml: readStoredZipEntry(writtenData, "word/document.xml"),
+		relationshipsXml,
+	};
+}
+
+async function renderAndReadDocumentXml(markdown: string): Promise<string> {
+	return (await renderAndReadDocxPackage(markdown)).documentXml;
+}
+
 describe("DOCX rendering", () => {
+	it("writes valid table rows and preserves every cell value", async () => {
+		const markdown = [
+			"| Name | Value |",
+			"| --- | --- |",
+			"| Alpha | 42 |",
+		].join("\n");
+
+		const documentXml = await renderAndReadDocumentXml(markdown);
+
+		expect(documentXml).toContain("<w:tbl>");
+		expect(documentXml).toContain("<w:tr>");
+		expect(documentXml).toContain("<w:tc>");
+		expect(documentXml).toContain(">Name<");
+		expect(documentXml).toContain(">Value<");
+		expect(documentXml).toContain(">Alpha<");
+		expect(documentXml).toContain(">42<");
+		expect(documentXml).not.toMatch(/<w:p[^>]*>\s*<w:tc>/);
+	});
+
 	it("writes a minimal DOCX package without external dependencies", async () => {
 		let writtenPath = "";
 		let writtenData: Uint8Array | null = null;

@@ -13,9 +13,22 @@ type DocxRun = {
 };
 
 type DocxParagraph = {
+	kind: "paragraph";
 	runs: DocxRun[];
 	style?: string;
 };
+
+type DocxTableCell = {
+	runs: DocxRun[];
+	header: boolean;
+};
+
+type DocxTable = {
+	kind: "table";
+	rows: DocxTableCell[][];
+};
+
+type DocxBlock = DocxParagraph | DocxTable;
 
 type DocxImage = {
 	rId: string;
@@ -50,8 +63,8 @@ export async function renderDocx(
 	const warnings: string[] = [];
 
 	const images = await collectImages(doc.attachments, app, warnings);
-	const paragraphs = buildDocxParagraphs(doc, images);
-	const documentXml = buildDocumentXml(paragraphs);
+	const blocks = buildDocxBlocks(doc, images);
+	const documentXml = buildDocumentXml(blocks);
 
 	const files: { name: string; data: Uint8Array }[] = [
 		{ name: "[Content_Types].xml", data: encodeXml(buildContentTypes(images)) },
@@ -147,7 +160,7 @@ function readImageDimensions(data: Uint8Array, ext: string): { width: number; he
 	return { width: 400, height: 300 };
 }
 
-function buildDocxParagraphs(doc: AssembledDocument, images: DocxImage[]): DocxParagraph[] {
+function buildDocxBlocks(doc: AssembledDocument, images: DocxImage[]): DocxBlock[] {
 	const imageMap = new Map<string, DocxImage>();
 	for (const img of images) {
 		imageMap.set(img.mediaPath, img);
@@ -157,23 +170,27 @@ function buildDocxParagraphs(doc: AssembledDocument, images: DocxImage[]): DocxP
 		imageMap.set(img.outputRelativePath.split("/").pop() ?? img.outputRelativePath, img);
 	}
 
-	const paragraphs: DocxParagraph[] = [
-		{ style: "Title", runs: [{ text: doc.title }] },
+	const blocks: DocxBlock[] = [
+		{ kind: "paragraph", style: "Title", runs: [{ text: doc.title }] },
 	];
 	const isSingleSection = doc.sections.length === 1;
 
 	for (const section of doc.sections) {
 		if (!(isSingleSection && section.title === doc.title)) {
-			paragraphs.push({ style: "Heading1", runs: [{ text: section.title }] });
+			blocks.push({
+				kind: "paragraph",
+				style: "Heading1",
+				runs: [{ text: section.title }],
+			});
 		}
-		paragraphs.push(...parseMarkdownToParagraphs(section.markdown, imageMap));
+		blocks.push(...parseMarkdownToBlocks(section.markdown, imageMap));
 	}
 
-	return paragraphs;
+	return blocks;
 }
 
-function parseMarkdownToParagraphs(markdown: string, imageMap: Map<string, DocxImage>): DocxParagraph[] {
-	const paragraphs: DocxParagraph[] = [];
+function parseMarkdownToBlocks(markdown: string, imageMap: Map<string, DocxImage>): DocxBlock[] {
+	const blocks: DocxBlock[] = [];
 	const lines = markdown.split("\n");
 	let i = 0;
 
@@ -208,7 +225,11 @@ function parseMarkdownToParagraphs(markdown: string, imageMap: Map<string, DocxI
 		if (line.startsWith("```")) {
 			i++;
 			while (i < lines.length && !lines[i].startsWith("```")) {
-				paragraphs.push({ style: "Code", runs: [{ text: lines[i] || " ", code: true }] });
+				blocks.push({
+					kind: "paragraph",
+					style: "Code",
+					runs: [{ text: lines[i] || " ", code: true }],
+				});
 				i++;
 			}
 			i++;
@@ -218,7 +239,11 @@ function parseMarkdownToParagraphs(markdown: string, imageMap: Map<string, DocxI
 		const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
 		if (headingMatch) {
 			const level = Math.min(headingMatch[1].length, 6);
-			paragraphs.push({ style: `Heading${level}`, runs: parseInline(headingMatch[2], imageMap) });
+			blocks.push({
+				kind: "paragraph",
+				style: `Heading${level}`,
+				runs: parseInline(headingMatch[2], imageMap),
+			});
 			i++;
 			continue;
 		}
@@ -232,39 +257,51 @@ function parseMarkdownToParagraphs(markdown: string, imageMap: Map<string, DocxI
 				tableLines.push(lines[i]);
 				i++;
 			}
-			paragraphs.push(...buildTableParagraphs(headerCells, tableLines.slice(1), imageMap));
+			blocks.push(buildTable(headerCells, tableLines.slice(1), imageMap));
 			continue;
 		}
 
 		if (/^[\s]*[-*+]\s/.test(line)) {
 			const text = line.replace(/^[\s]*[-*+]\s/, "");
-			paragraphs.push({ style: "ListParagraph", runs: parseInline(`• ${text}`, imageMap) });
+			blocks.push({
+				kind: "paragraph",
+				style: "ListParagraph",
+				runs: parseInline(`• ${text}`, imageMap),
+			});
 			i++;
 			continue;
 		}
 
 		if (/^[\s]*\d+\.\s/.test(line)) {
 			const text = line.replace(/^[\s]*\d+\.\s/, "");
-			paragraphs.push({ style: "ListParagraph", runs: parseInline(text, imageMap) });
+			blocks.push({
+				kind: "paragraph",
+				style: "ListParagraph",
+				runs: parseInline(text, imageMap),
+			});
 			i++;
 			continue;
 		}
 
 		if (line.startsWith("> ")) {
-			paragraphs.push({ style: "Quote", runs: parseInline(line.replace(/^>\s?/, ""), imageMap) });
+			blocks.push({
+				kind: "paragraph",
+				style: "Quote",
+				runs: parseInline(line.replace(/^>\s?/, ""), imageMap),
+			});
 			i++;
 			continue;
 		}
 
 		if (/^[-*_]{3,}\s*$/.test(line)) {
-			paragraphs.push({ runs: [{ text: "------" }] });
+			blocks.push({ kind: "paragraph", runs: [{ text: "------" }] });
 			i++;
 			continue;
 		}
 
 		// Empty line → paragraph separator
 		if (line.trim() === "") {
-			paragraphs.push({ runs: [{ text: "" }] });
+			blocks.push({ kind: "paragraph", runs: [{ text: "" }] });
 			i++;
 			continue;
 		}
@@ -288,39 +325,32 @@ function parseMarkdownToParagraphs(markdown: string, imageMap: Map<string, DocxI
 			}
 			runs.push(...lineRuns);
 		}
-		paragraphs.push({ runs });
+		blocks.push({ kind: "paragraph", runs });
 	}
 
-	return paragraphs;
+	return blocks;
 }
 
-function buildTableParagraphs(
+function buildTable(
 	headerCells: string[],
 	bodyLines: string[],
 	imageMap: Map<string, DocxImage>,
-): DocxParagraph[] {
-	const result: DocxParagraph[] = [];
-
-	const headerRuns = headerCells.map(cell => ({
+): DocxTable {
+	const rows: DocxTableCell[][] = [];
+	rows.push(headerCells.map(cell => ({
 		runs: parseInline(cell.trim(), imageMap),
-		isHeader: true,
-	}));
-	result.push({ style: "TableRow", runs: buildTableRowXml(headerRuns) });
+		header: true,
+	})));
 
 	for (const bodyLine of bodyLines) {
 		const cells = parseTableRow(bodyLine);
-		const cellRuns = cells.map(cell => ({
+		rows.push(cells.map(cell => ({
 			runs: parseInline(cell.trim(), imageMap),
-			isHeader: false,
-		}));
-		result.push({ style: "TableRow", runs: buildTableRowXml(cellRuns) });
+			header: false,
+		})));
 	}
 
-	return result;
-}
-
-function buildTableRowXml(_cells: { runs: DocxRun[]; isHeader: boolean }[]): DocxRun[] {
-	return [{ text: "" }];
+	return { kind: "table", rows };
 }
 
 function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] {
@@ -414,8 +444,8 @@ function parseTableRow(line: string): string[] {
 	return line.split("|").slice(1, -1).map((cell) => cell.trim());
 }
 
-function buildDocumentXml(paragraphs: DocxParagraph[]): string {
-	const body = paragraphs.map(p => paragraphToXml(p)).join("");
+function buildDocumentXml(blocks: DocxBlock[]): string {
+	const body = blocks.map(blockToXml).join("");
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
@@ -426,14 +456,25 @@ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 </w:document>`;
 }
 
-function paragraphToXml(paragraph: DocxParagraph): string {
-	if (paragraph.style === "TableRow") {
-		const cells = paragraph.runs.map(() =>
-			`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr><w:r><w:t xml:space="preserve"> </w:t></w:r></w:p></w:tc>`
-		).join("");
-		return `<w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr>${cells}</w:p>`;
-	}
+function blockToXml(block: DocxBlock): string {
+	return block.kind === "table" ? tableToXml(block) : paragraphToXml(block);
+}
 
+function tableToXml(table: DocxTable): string {
+	const rows = table.rows.map((row) => {
+		const cells = row.map((cell) => {
+			const runs = cell.runs.map((run) => {
+				return runToXml(cell.header ? { ...run, bold: true } : run);
+			}).join("");
+			return `<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p>${runs}</w:p></w:tc>`;
+		}).join("");
+		return `<w:tr>${cells}</w:tr>`;
+	}).join("");
+
+	return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>${rows}</w:tbl>`;
+}
+
+function paragraphToXml(paragraph: DocxParagraph): string {
 	const style = paragraph.style ? `<w:pPr><w:pStyle w:val="${paragraph.style}"/></w:pPr>` : "";
 	const runs = paragraph.runs.map(runToXml).join("");
 	return `<w:p>${style}${runs}</w:p>`;
