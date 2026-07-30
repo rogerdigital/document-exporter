@@ -105,23 +105,35 @@ export function rewriteAppProtocolUrls(
 	html: string,
 	attachments: AttachmentCopy[],
 ): string {
-	const attachmentMap = new Map<string, string>();
-	for (const att of attachments) {
-		const filename = att.sourcePath.split("/").pop() ?? "";
-		attachmentMap.set(filename, att.outputRelativePath);
+	return html.replace(/src="(app:\/\/[^"]+)"/g, (match, rawUrl: string) => {
+		const outputPath = resolveAttachmentUrl(rawUrl, attachments);
+		return outputPath ? `src="${outputPath}"` : match;
+	});
+}
+
+function resolveAttachmentUrl(
+	rawUrl: string,
+	attachments: AttachmentCopy[],
+): string | null {
+	let decodedPath: string;
+	try {
+		decodedPath = decodeURIComponent(new URL(rawUrl).pathname)
+			.replace(/^\/+/, "");
+	} catch {
+		return null;
 	}
 
-	return html.replace(
-		/src="app:\/\/[^"]*\/([^"/?]+)(?:\?[^"]*)?"/g,
-		(match, filename: string) => {
-			const decodedName = decodeURIComponent(filename);
-			const relPath = attachmentMap.get(decodedName);
-			if (relPath) {
-				return `src="${relPath}"`;
-			}
-			return match;
-		},
-	);
+	const exact = attachments.find((attachment) => {
+		return decodedPath === attachment.sourcePath
+			|| decodedPath.endsWith(`/${attachment.sourcePath}`);
+	});
+	if (exact) return exact.outputRelativePath;
+
+	const basename = decodedPath.split("/").pop() ?? "";
+	const matches = attachments.filter((attachment) => {
+		return attachment.sourcePath.split("/").pop() === basename;
+	});
+	return matches.length === 1 ? matches[0].outputRelativePath : null;
 }
 
 async function waitForPostProcessors(
