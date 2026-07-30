@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { ExportRunner, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
 import { OutputWriter } from "@/export/OutputWriter";
+import { Platform } from "obsidian";
 
 vi.mock("@/formats/pdf", () => ({
 	renderPdf: vi.fn(() => Promise.reject(new Error("PDF generation failed: test failure"))),
@@ -96,6 +97,8 @@ function makePdfPlan(files: string[]) {
 
 afterEach(() => {
 	vi.restoreAllMocks();
+	Platform.isDesktopApp = true;
+	Platform.isDesktop = true;
 });
 
 describe("ExportRunner", () => {
@@ -193,6 +196,21 @@ describe("ExportRunner", () => {
 
 			expect(result.success).toBe(false);
 			expect(result.warnings[0]).toContain("PDF generation failed");
+		});
+
+		it("rejects PDF on mobile before creating output artifacts", async () => {
+			Platform.isDesktopApp = false;
+			Platform.isDesktop = false;
+			const app = createMockApp(["a.md"]);
+			const runner = new ExportRunner(app as never);
+
+			const result = await runner.run(makePdfPlan(["a.md"]), defaultSettings());
+
+			expect(result.success).toBe(false);
+			expect(result.warnings).toEqual(["PDF export requires the desktop app."]);
+			expect(app.vault.createFolder).not.toHaveBeenCalled();
+			expect(app.vault.create).not.toHaveBeenCalled();
+			expect(app.vault.createBinary).not.toHaveBeenCalled();
 		});
 	});
 

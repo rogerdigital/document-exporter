@@ -1,5 +1,9 @@
 import { App, Modal, Platform, TFile, TFolder, FuzzySuggestModal } from "obsidian";
 import { ExportProfileId, ExportSettings, ExportSource } from "@/types";
+import {
+	getAvailableProfiles,
+	resolveSupportedProfile,
+} from "@/export/ProfileCapabilities";
 
 const PROFILE_OPTIONS: Record<ExportProfileId, string> = {
 	pdf: "PDF",
@@ -38,7 +42,10 @@ export class ExportModal extends Modal {
 	constructor(app: App, settings: ExportSettings, preselectedFile?: TFile, preselectedFolder?: TFolder) {
 		super(app);
 		this.settings = settings;
-		this.profile = settings.defaultProfile;
+		this.profile = resolveSupportedProfile(
+			settings.defaultProfile,
+			Platform.isDesktopApp,
+		);
 		this.outputFolder = settings.defaultOutputFolder;
 		this.outputFilename = this.deriveDefaultFilename();
 		this.preselectedFile = preselectedFile;
@@ -123,8 +130,8 @@ export class ExportModal extends Modal {
 		const profileRow = contentEl.createDiv({ cls: "export-modal-row" });
 		profileRow.createEl("label", { text: "Format" });
 		const profileSelect = profileRow.createEl("select");
-		for (const [value, label] of Object.entries(PROFILE_OPTIONS)) {
-			const opt = profileSelect.createEl("option", { text: label });
+		for (const value of getAvailableProfiles(Platform.isDesktopApp)) {
+			const opt = profileSelect.createEl("option", { text: PROFILE_OPTIONS[value] });
 			opt.value = value;
 		}
 		profileSelect.value = this.profile;

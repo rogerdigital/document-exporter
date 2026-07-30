@@ -11,13 +11,11 @@ export async function renderPdf(
 	app: App,
 	outputFilePath?: string,
 ): Promise<string[]> {
-	const warnings: string[] = [];
-
 	if (!Platform.isDesktopApp) {
-		warnings.push("PDF export requires the desktop app.");
-		return warnings;
+		throw new Error("PDF export requires the desktop app.");
 	}
 
+	const warnings: string[] = [];
 	await writer.ensureFolder(plan.outputRoot);
 
 	const toc = doc.sections.length > 1 ? generateToc(doc.sections) : "";

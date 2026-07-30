@@ -1,4 +1,4 @@
-import { App } from "obsidian";
+import { App, Platform } from "obsidian";
 import { ExportPlan, ExportSettings } from "@/types";
 import { DocumentAssembler } from "@/export/DocumentAssembler";
 import { AttachmentCollector } from "@/export/AttachmentCollector";
@@ -9,6 +9,7 @@ import { renderHtmlDocument } from "@/formats/html-document";
 import { renderPdf } from "@/formats/pdf";
 import { renderDocx } from "@/formats/docx";
 import { relocatePlan } from "@/export/ExportPlan";
+import { isProfileSupported } from "@/export/ProfileCapabilities";
 
 export interface ExportResult {
 	success: boolean;
@@ -50,6 +51,14 @@ export class ExportRunner {
 		const writer = new OutputWriter(this.app);
 		const allWarnings: string[] = [];
 		this.cancelled = false;
+
+		if (!isProfileSupported(plan.profile, Platform.isDesktopApp)) {
+			return {
+				success: false,
+				outputRoot: plan.outputRoot,
+				warnings: ["PDF export requires the desktop app."],
+			};
+		}
 
 		if (!OutputWriter.supportsExternalPaths() && writer.isExternal(plan.outputRoot)) {
 			return {

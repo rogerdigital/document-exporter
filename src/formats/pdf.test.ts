@@ -1,13 +1,43 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { Platform } from "obsidian";
 import {
 	buildPdfHtml,
 	buildPdfDocumentWriteScript,
 	createPdfBrowserWindowOptions,
 	createPdfPrintOptions,
 	encodeAttachmentDataUri,
+	renderPdf,
 } from "@/formats/pdf";
 
+afterEach(() => {
+	Platform.isDesktopApp = true;
+	Platform.isDesktop = true;
+});
+
 describe("PDF rendering", () => {
+	it("rejects PDF rendering on mobile", async () => {
+		Platform.isDesktopApp = false;
+		Platform.isDesktop = false;
+		const doc = {
+			title: "Note",
+			sections: [],
+			attachments: [],
+		};
+		const plan = {
+			profile: "pdf" as const,
+			source: { type: "current-file" as const, path: "note.md" },
+			inputFiles: ["note.md"],
+			outputRoot: "exports",
+			outputFilename: "note",
+			outputFiles: ["exports/note.pdf"],
+			attachmentCopies: [],
+		};
+
+		await expect(
+			renderPdf(doc, plan, {} as never, {} as never),
+		).rejects.toThrow("PDF export requires the desktop app.");
+	});
+
 	it("appends page reset styles after app styles", () => {
 		const html = buildPdfHtml(
 			"<h1>Title</h1><p>Content</p>",
