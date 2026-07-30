@@ -9,7 +9,7 @@ Export single notes, entire folders, or hand-picked files into PDF, Word, Markdo
 - **Batch export** — export an entire folder or selected files at once, preserving directory structure
 - **PDF** — generates a print-ready `.pdf` with native Obsidian rendering
 - **Word document** — generates a `.docx` document for editing and sharing
-- **Markdown bundle** — combines notes into a single `.md` file with copied attachments and rewritten links
+- **Markdown bundle** — creates one `.md` file per source note plus a shared `assets/` directory, with attachments copied and links rewritten
 - **HTML document** — generates a standalone `.html` with table of contents, native rendering, and linked assets
 - **Progress bar with cancel** — visual progress indicator for every export, with a cancel button that preserves already-exported files
 
@@ -28,7 +28,7 @@ Multiple ways to start an export:
 ### Export dialog
 
 1. Choose **source** — current file, folder, or selected files
-2. Choose **format** — PDF, Word document, Markdown bundle, or HTML document
+2. Choose **format** — PDF, Word document, Markdown bundle, or HTML document. PDF is not offered on mobile.
 3. Set **output folder** — type a path, click **Vault** to pick from vault folders, or **Choose folder** to select a system folder (desktop only)
 4. Set **file name** (single file) or **folder name** (batch export) — defaults to the source file or folder name
 5. Click **Next** → review the summary → click **Export**
@@ -73,7 +73,7 @@ Open **Settings → Document Exporter**.
 - Inline note embeds (`![[Note]]`) are preserved as links, not expanded
 - Dataview queries are not executed during export
 - Canvas files are not supported
-- PDF export requires the desktop app
+- PDF export requires the desktop app and is not offered on mobile
 
 ## Privacy
 
