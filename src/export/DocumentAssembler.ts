@@ -36,13 +36,12 @@ export class DocumentAssembler {
 		let sectionTitle = deriveTitle(file, frontmatter);
 		let contentBody = body;
 
-		// When the title is NOT from frontmatter, check if the body starts with
-		// an H1. If so, use that heading as the title and remove it from the
-		// body so each format's prepended title doesn't duplicate it.
-		if (typeof frontmatter.title !== "string") {
-			const extracted = extractLeadingH1(contentBody);
-			if (extracted) {
+		const extracted = extractLeadingH1(contentBody);
+		if (extracted) {
+			if (typeof frontmatter.title !== "string") {
 				sectionTitle = extracted.title;
+				contentBody = extracted.remaining;
+			} else if (extracted.title.trim() === frontmatter.title.trim()) {
 				contentBody = extracted.remaining;
 			}
 		}
@@ -64,20 +63,16 @@ export class DocumentAssembler {
 export function stripFrontmatter(
 	content: string,
 ): { body: string; frontmatter: Record<string, unknown> } {
-	if (!content.startsWith("---")) {
+	const match = content.match(/^---\r?\n((?:[\s\S]*?\r?\n)?)---(?:\r?\n|$)/);
+	if (!match) {
 		return { body: content, frontmatter: {} };
 	}
 
-	const closingIndex = content.indexOf("\n---\n", 3);
-	if (closingIndex === -1) {
-		return { body: content, frontmatter: {} };
-	}
-
-	const yamlBlock = content.slice(3, closingIndex).trim();
-	const body = content.slice(closingIndex + 5).trimStart();
+	const yamlBlock = match[1].replace(/\r?\n$/, "");
+	const body = content.slice(match[0].length);
 
 	const frontmatter: Record<string, unknown> = {};
-	for (const line of yamlBlock.split("\n")) {
+	for (const line of yamlBlock.split(/\r?\n/)) {
 		if (/^\s/.test(line) || line.startsWith("-")) continue;
 		const colonIndex = line.indexOf(":");
 		if (colonIndex === -1) continue;

@@ -3,7 +3,7 @@
 	"name": "Document Exporter",
 	"version": "0.4.9",
 	"minAppVersion": "1.4.0",
-	"description": "Export notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.",
+	"description": "Export notes, folders, and selected Markdown files to PDF, Word, Markdown bundles, and HTML.",
 	"author": "Roger Deng",
 	"authorUrl": "https://github.com/rogerdigital",
 	"isDesktopOnly": false

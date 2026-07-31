@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
+	DocumentAssembler,
 	stripFrontmatter,
 	deriveTitle,
 	extractLeadingH1,
@@ -61,6 +62,64 @@ describe("stripFrontmatter", () => {
 		expect(frontmatter.title).toBe("Top");
 		expect(frontmatter.tags).toBeNull();
 		expect(frontmatter.nested).toBeNull();
+	});
+
+	it("parses CRLF frontmatter without leaking delimiters", () => {
+		const result = stripFrontmatter("---\r\ntitle: Hello\r\n---\r\nBody");
+		expect(result.frontmatter).toEqual({ title: "Hello" });
+		expect(result.body).toBe("Body");
+	});
+
+	it("accepts a closing delimiter at end of file", () => {
+		const result = stripFrontmatter("---\ntitle: Hello\n---");
+		expect(result.frontmatter).toEqual({ title: "Hello" });
+		expect(result.body).toBe("");
+	});
+
+	it("accepts an empty frontmatter block", () => {
+		const result = stripFrontmatter("---\n---\nBody");
+		expect(result.frontmatter).toEqual({});
+		expect(result.body).toBe("Body");
+	});
+
+	it("preserves indentation at the beginning of the body", () => {
+		const result = stripFrontmatter("---\ntitle: Hello\n---\n    code");
+		expect(result.body).toBe("    code");
+	});
+});
+
+describe("DocumentAssembler titles", () => {
+	const file = {
+		path: "note.md",
+		basename: "note",
+		extension: "md",
+		name: "note.md",
+	};
+
+	function createApp(content: string) {
+		return {
+			vault: {
+				read: vi.fn().mockResolvedValue(content),
+			},
+		};
+	}
+
+	it("removes a leading H1 that duplicates the frontmatter title", async () => {
+		const app = createApp("---\ntitle: Same\n---\n# Same\nBody");
+		const document = await new DocumentAssembler(app as never)
+			.assemble([file as never]);
+
+		expect(document.title).toBe("Same");
+		expect(document.sections[0].markdown).toBe("Body");
+	});
+
+	it("keeps a leading H1 that differs from the frontmatter title", async () => {
+		const app = createApp("---\ntitle: Document\n---\n# Section\nBody");
+		const document = await new DocumentAssembler(app as never)
+			.assemble([file as never]);
+
+		expect(document.title).toBe("Document");
+		expect(document.sections[0].markdown).toBe("# Section\nBody");
 	});
 });
 

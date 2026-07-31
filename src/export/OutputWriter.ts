@@ -92,9 +92,19 @@ export class OutputWriter {
 		return folder !== null && "children" in folder;
 	}
 
+	pathExists(path: string): boolean {
+		if (this.isExternal(path)) {
+			return nodeFs?.existsSync(path) ?? false;
+		}
+		return this.app.vault.getAbstractFileByPath(path) !== null;
+	}
+
+	timestampSuffix(): string {
+		return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+	}
+
 	timestampedFolder(basePath: string): string {
-		const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-		return `${basePath}-${ts}`;
+		return `${basePath}-${this.timestampSuffix()}`;
 	}
 
 	isFolderEmpty(folderPath: string): boolean {
@@ -108,8 +118,8 @@ export class OutputWriter {
 	}
 
 	isExternal(p: string): boolean {
-		if (p.startsWith("/")) return true;
-		if (/^[A-Za-z]:/.test(p)) return true;
+		if (p.startsWith("/") || p.startsWith("\\\\")) return true;
+		if (/^[A-Za-z]:[\\/]/.test(p)) return true;
 		return false;
 	}
 

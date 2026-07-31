@@ -2,15 +2,17 @@ import { App, TAbstractFile, TFile } from "obsidian";
 import { AttachmentCopy } from "@/types";
 import { normalizePath } from "@/export/utils";
 
-const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g;
+const MARKDOWN_IMAGE_RE =
+	/!\[[^\]]*\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
+
+export const ATTACHMENT_EXTENSIONS = new Set([
+	"png", "jpg", "jpeg", "gif", "bmp", "svg", "webp",
+	"pdf",
+	"mp3", "mp4", "wav", "ogg", "m4a", "flac", "webm", "mov", "m4v",
+]);
 
 function isFileLike(f: TAbstractFile | null): f is TFile {
 	return f !== null && "extension" in f;
-}
-
-function isAttachmentExt(ext: string): boolean {
-	const exts = ["png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "pdf", "mp3", "mp4", "wav", "ogg"];
-	return exts.includes(ext);
 }
 
 export interface CollectResult {
@@ -55,7 +57,10 @@ export class AttachmentCollector {
 					if (!target || this.exportedPaths.has(target)) continue;
 
 					const targetFile = this.app.vault.getAbstractFileByPath(target);
-					if (isFileLike(targetFile) && isAttachmentExt(targetFile.extension)) {
+					if (
+						isFileLike(targetFile)
+						&& ATTACHMENT_EXTENSIONS.has(targetFile.extension.toLowerCase())
+					) {
 						this.addAttachment(target, targetFile, seen);
 					}
 				}
@@ -77,8 +82,11 @@ export class AttachmentCollector {
 
 		MARKDOWN_IMAGE_RE.lastIndex = 0;
 		while ((match = MARKDOWN_IMAGE_RE.exec(content)) !== null) {
-			const href = match[2];
-			if (href.startsWith("http://") || href.startsWith("https://")) continue;
+			const hrefToken = match[1];
+			const href = hrefToken.startsWith("<") && hrefToken.endsWith(">")
+				? hrefToken.slice(1, -1)
+				: hrefToken;
+			if (/^(?:https?:|data:)/i.test(href)) continue;
 			if (seen.has(href)) continue;
 
 			const target = this.resolveRelativePath(href, sourcePath);

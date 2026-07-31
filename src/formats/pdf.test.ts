@@ -1,13 +1,44 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { Platform } from "obsidian";
 import {
 	buildPdfHtml,
 	buildPdfDocumentWriteScript,
 	createPdfBrowserWindowOptions,
 	createPdfPrintOptions,
 	encodeAttachmentDataUri,
+	replacePdfAttachmentUrls,
+	renderPdf,
 } from "@/formats/pdf";
 
+afterEach(() => {
+	Platform.isDesktopApp = true;
+	Platform.isDesktop = true;
+});
+
 describe("PDF rendering", () => {
+	it("rejects PDF rendering on mobile", async () => {
+		Platform.isDesktopApp = false;
+		Platform.isDesktop = false;
+		const doc = {
+			title: "Note",
+			sections: [],
+			attachments: [],
+		};
+		const plan = {
+			profile: "pdf" as const,
+			source: { type: "current-file" as const, path: "note.md" },
+			inputFiles: ["note.md"],
+			outputRoot: "exports",
+			outputFilename: "note",
+			outputFiles: ["exports/note.pdf"],
+			attachmentCopies: [],
+		};
+
+		await expect(
+			renderPdf(doc, plan, {} as never, {} as never),
+		).rejects.toThrow("PDF export requires the desktop app.");
+	});
+
 	it("appends page reset styles after app styles", () => {
 		const html = buildPdfHtml(
 			"<h1>Title</h1><p>Content</p>",
@@ -124,5 +155,27 @@ describe("PDF rendering", () => {
 		const dataUri = encodeAttachmentDataUri(buffer, "png");
 
 		expect(dataUri).toBe("data:image/png;base64,AP8QgA==");
+	});
+
+	it("replaces a nested relative attachment URL without retaining its parent prefix", () => {
+		const html = [
+			'<img src="../assets/image.png">',
+			'<a href="../../assets/reference.pdf">Reference</a>',
+		].join("");
+
+		const withImage = replacePdfAttachmentUrls(
+			html,
+			"assets/image.png",
+			"data:image/png;base64,abc",
+		);
+		const withPdf = replacePdfAttachmentUrls(
+			withImage,
+			"assets/reference.pdf",
+			"data:application/pdf;base64,xyz",
+		);
+
+		expect(withPdf).toContain('src="data:image/png;base64,abc"');
+		expect(withPdf).toContain('href="data:application/pdf;base64,xyz"');
+		expect(withPdf).not.toContain("../data:");
 	});
 });

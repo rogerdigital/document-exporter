@@ -1,5 +1,9 @@
-import { PluginSettingTab, App, Setting, debounce } from "obsidian";
+import { PluginSettingTab, App, Platform, Setting, debounce } from "obsidian";
 import { ExportProfileId } from "@/types";
+import {
+	getAvailableProfiles,
+	resolveSupportedProfile,
+} from "@/export/ProfileCapabilities";
 import type DocumentExporterPlugin from "@/main";
 
 const PROFILE_LABELS: Record<ExportProfileId, string> = {
@@ -42,8 +46,13 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 			.setName("Default export format")
 			.setDesc("Choose the default format when opening the export dialog.")
 			.addDropdown((dd) => {
-				dd.addOptions(PROFILE_LABELS);
-				dd.setValue(this.plugin.settings.defaultProfile);
+				for (const profile of getAvailableProfiles(Platform.isDesktopApp)) {
+					dd.addOption(profile, PROFILE_LABELS[profile]);
+				}
+				dd.setValue(resolveSupportedProfile(
+					this.plugin.settings.defaultProfile,
+					Platform.isDesktopApp,
+				));
 				dd.onChange(async (v) => {
 					this.plugin.settings.defaultProfile = v as ExportProfileId;
 					await this.plugin.saveSettings();

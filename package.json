@@ -1,11 +1,12 @@
 {
   "name": "document-exporter",
   "version": "0.4.9",
-  "description": "Export notes, folders, and query results into Markdown bundles, HTML documents, and print-ready exports.",
+  "description": "Export notes, folders, and selected Markdown files to PDF, Word, Markdown bundles, and HTML.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "check:version": "node scripts/check-version.mjs",
     "lint:obsidian-warnings": "eslint 'src/**/*.ts'",
     "test": "vitest run",
     "test:watch": "vitest",

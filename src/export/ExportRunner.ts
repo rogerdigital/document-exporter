@@ -1,4 +1,4 @@
-import { App } from "obsidian";
+import { App, Platform } from "obsidian";
 import { ExportPlan, ExportSettings } from "@/types";
 import { DocumentAssembler } from "@/export/DocumentAssembler";
 import { AttachmentCollector } from "@/export/AttachmentCollector";
@@ -8,6 +8,8 @@ import { renderMarkdownBundle } from "@/formats/markdown-bundle";
 import { renderHtmlDocument } from "@/formats/html-document";
 import { renderPdf } from "@/formats/pdf";
 import { renderDocx } from "@/formats/docx";
+import { relocatePlan } from "@/export/ExportPlan";
+import { isProfileSupported } from "@/export/ProfileCapabilities";
 
 export interface ExportResult {
 	success: boolean;
@@ -50,6 +52,14 @@ export class ExportRunner {
 		const allWarnings: string[] = [];
 		this.cancelled = false;
 
+		if (!isProfileSupported(plan.profile, Platform.isDesktopApp)) {
+			return {
+				success: false,
+				outputRoot: plan.outputRoot,
+				warnings: ["PDF export requires the desktop app."],
+			};
+		}
+
 		if (!OutputWriter.supportsExternalPaths() && writer.isExternal(plan.outputRoot)) {
 			return {
 				success: false,
@@ -77,23 +87,17 @@ export class ExportRunner {
 			allWarnings.push(`Large export: ${files.length} files. This may take a while.`);
 		}
 
-		let outputRoot = plan.outputRoot;
-		if (!settings.overwriteExisting && !writer.isExternal(outputRoot)) {
-			if (writer.folderExists(outputRoot)) {
-				outputRoot = writer.timestampedFolder(outputRoot);
-			}
-		}
-
-		const effectivePlan = { ...plan, outputRoot };
-		const exportedPaths = new Set(plan.inputFiles);
+		const effectivePlan = this.resolveEffectivePlan(plan, settings, writer);
+		const outputRoot = effectivePlan.outputRoot;
+		const exportedPaths = new Set(effectivePlan.inputFiles);
 
 		const assetsRoot = effectivePlan.outputFolderName
 			? `${outputRoot}/${effectivePlan.outputFolderName}`
 			: outputRoot;
 
 		const outputPathMap = new Map<string, string>();
-		for (let i = 0; i < plan.inputFiles.length; i++) {
-			outputPathMap.set(plan.inputFiles[i], plan.outputFiles[i]);
+		for (let i = 0; i < effectivePlan.inputFiles.length; i++) {
+			outputPathMap.set(effectivePlan.inputFiles[i], effectivePlan.outputFiles[i]);
 		}
 
 		const assembler = new DocumentAssembler(this.app, settings.includeSourcePathComments);
@@ -109,7 +113,7 @@ export class ExportRunner {
 			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
 			const file = files[i];
-			const outputFilePath = outputPathMap.get(file.path) ?? plan.outputFiles[i];
+			const outputFilePath = outputPathMap.get(file.path) ?? effectivePlan.outputFiles[i];
 
 			callbacks?.onFileStart(i, files.length, file.basename);
 
@@ -119,7 +123,7 @@ export class ExportRunner {
 			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
 			// Step 2: Collect attachments for this file
-			let attachments = plan.attachmentCopies;
+			let attachments = effectivePlan.attachmentCopies;
 			if (collector) {
 				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[1] : `Collecting attachments for ${file.basename}`);
 				const collectResult = await collector.collect([file]);
@@ -184,7 +188,13 @@ export class ExportRunner {
 			if (doc.attachments.length > 0) {
 				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[4] : `Copying attachments for ${file.basename}`);
 				await writer.ensureFolder(`${assetsRoot}/assets`);
+				if (this.cancelled) {
+					return this.cancelledResult(outputRoot, completedFiles, files.length);
+				}
 				for (const att of doc.attachments) {
+					if (this.cancelled) {
+						return this.cancelledResult(outputRoot, completedFiles, files.length);
+					}
 					if (copiedAttachments.has(att.outputRelativePath)) continue;
 					copiedAttachments.add(att.outputRelativePath);
 					try {
@@ -230,5 +240,48 @@ export class ExportRunner {
 			outputRoot,
 			warnings: [msg],
 		};
+	}
+
+	private resolveEffectivePlan(
+		plan: ExportPlan,
+		settings: ExportSettings,
+		writer: OutputWriter,
+	): ExportPlan {
+		if (settings.overwriteExisting) return plan;
+
+		if (plan.source.type === "current-file") {
+			const targetPath = plan.outputFiles[0];
+			if (!targetPath || !writer.pathExists(targetPath)) return plan;
+			const candidateRoot = this.nextAvailablePath(
+				writer.timestampedFolder(plan.outputRoot),
+				writer,
+			);
+			return relocatePlan(plan, candidateRoot);
+		}
+
+		const batchRoot = plan.outputFolderName
+			? `${plan.outputRoot}/${plan.outputFolderName}`
+			: plan.outputRoot;
+		if (!writer.pathExists(batchRoot)) return plan;
+
+		const baseFolderName = `${plan.outputFolderName ?? "files"}-${writer.timestampSuffix()}`;
+		const availablePath = this.nextAvailablePath(
+			`${plan.outputRoot}/${baseFolderName}`,
+			writer,
+		);
+		const folderName = availablePath.slice(plan.outputRoot.length + 1);
+		return relocatePlan(plan, plan.outputRoot, folderName);
+	}
+
+	private nextAvailablePath(candidate: string, writer: OutputWriter): string {
+		if (!writer.pathExists(candidate)) return candidate;
+
+		let sequence = 2;
+		let available = `${candidate}-${sequence}`;
+		while (writer.pathExists(available)) {
+			sequence++;
+			available = `${candidate}-${sequence}`;
+		}
+		return available;
 	}
 }

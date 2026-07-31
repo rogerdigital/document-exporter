@@ -1,7 +1,11 @@
 import { App, Platform, TFile } from "obsidian";
 import { AssembledDocument, DocumentSection, ExportPlan } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
-import { renderMarkdownNative, rewriteAppProtocolUrls } from "@/formats/native-renderer";
+import {
+	renderMarkdownNative,
+	restoreAttachmentSourceUrls,
+	rewriteAppProtocolUrls,
+} from "@/formats/native-renderer";
 import { markdownToBasicHtml, escapeHtml } from "@/formats/html-document";
 
 export async function renderPdf(
@@ -11,13 +15,11 @@ export async function renderPdf(
 	app: App,
 	outputFilePath?: string,
 ): Promise<string[]> {
-	const warnings: string[] = [];
-
 	if (!Platform.isDesktopApp) {
-		warnings.push("PDF export requires the desktop app.");
-		return warnings;
+		throw new Error("PDF export requires the desktop app.");
 	}
 
+	const warnings: string[] = [];
 	await writer.ensureFolder(plan.outputRoot);
 
 	const toc = doc.sections.length > 1 ? generateToc(doc.sections) : "";
@@ -33,7 +35,11 @@ export async function renderPdf(
 					const buffer = await app.vault.readBinary(file);
 					const ext = att.sourcePath.split(".").pop()?.toLowerCase() ?? "";
 					const dataUri = encodeAttachmentDataUri(buffer, ext);
-					finalBody = finalBody.split(att.outputRelativePath).join(dataUri);
+					finalBody = replacePdfAttachmentUrls(
+						finalBody,
+						att.outputRelativePath,
+						dataUri,
+					);
 				}
 			} catch {
 				warnings.push(`Failed to embed attachment for PDF: ${att.sourcePath}`);
@@ -82,7 +88,16 @@ async function renderSections(
 
 		if (typeof document !== "undefined") {
 			try {
-				const result = await renderMarkdownNative(app, s.markdown, s.sourcePath);
+				const renderableMarkdown = restoreAttachmentSourceUrls(
+					s.markdown,
+					s.sourcePath,
+					attachments,
+				);
+				const result = await renderMarkdownNative(
+					app,
+					renderableMarkdown,
+					s.sourcePath,
+				);
 				sectionHtml = rewriteAppProtocolUrls(result.html, attachments);
 				allWarnings.push(...result.warnings);
 			} catch {
@@ -414,6 +429,26 @@ export function encodeAttachmentDataUri(buffer: ArrayBuffer, ext: string): strin
 	const bytes = new Uint8Array(buffer);
 	const base64 = encodeBase64(bytes);
 	return `data:${mimeFromExt(ext)};base64,${base64}`;
+}
+
+export function replacePdfAttachmentUrls(
+	html: string,
+	outputRelativePath: string,
+	dataUri: string,
+): string {
+	const relativeUrl = `(?:\\.\\/)?(?:\\.\\.\\/)*${escapeRegExp(outputRelativePath)}`;
+	const attributePattern = new RegExp(
+		`(\\b(?:src|href|data)=["'])${relativeUrl}(["'])`,
+		"g",
+	);
+	return html.replace(
+		attributePattern,
+		(_match, prefix: string, suffix: string) => `${prefix}${dataUri}${suffix}`,
+	);
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function encodeBase64(bytes: Uint8Array): string {

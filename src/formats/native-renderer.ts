@@ -1,5 +1,6 @@
 import { App, Component, MarkdownRenderer } from "obsidian";
 import { AttachmentCopy } from "@/types";
+import { relativePathBetween } from "@/export/utils";
 
 export interface NativeRenderResult {
 	html: string;
@@ -105,23 +106,72 @@ export function rewriteAppProtocolUrls(
 	html: string,
 	attachments: AttachmentCopy[],
 ): string {
-	const attachmentMap = new Map<string, string>();
-	for (const att of attachments) {
-		const filename = att.sourcePath.split("/").pop() ?? "";
-		attachmentMap.set(filename, att.outputRelativePath);
-	}
+	return html.replace(/\b(src|href|data)="(app:\/\/[^"]+)"/g, (
+		match,
+		attribute: string,
+		rawUrl: string,
+	) => {
+		const outputPath = resolveAttachmentUrl(rawUrl, attachments);
+		return outputPath ? `${attribute}="${outputPath}"` : match;
+	});
+}
 
-	return html.replace(
-		/src="app:\/\/[^"]*\/([^"/?]+)(?:\?[^"]*)?"/g,
-		(match, filename: string) => {
-			const decodedName = decodeURIComponent(filename);
-			const relPath = attachmentMap.get(decodedName);
-			if (relPath) {
-				return `src="${relPath}"`;
-			}
-			return match;
+export function restoreAttachmentSourceUrls(
+	markdown: string,
+	sourcePath: string,
+	attachments: AttachmentCopy[],
+): string {
+	const restoreUrl = (rawUrl: string): string => {
+		const wrapped = rawUrl.startsWith("<") && rawUrl.endsWith(">");
+		const url = wrapped ? rawUrl.slice(1, -1) : rawUrl;
+		const normalized = url.replace(/^(?:(?:\.\.|\.)\/)+/, "");
+		const attachment = attachments.find(
+			(candidate) => candidate.outputRelativePath === normalized,
+		);
+		if (!attachment) return rawUrl;
+
+		const sourceUrl = relativePathBetween(sourcePath, attachment.sourcePath);
+		return wrapped ? `<${sourceUrl}>` : sourceUrl;
+	};
+
+	const markdownDestination =
+		/(!?\[[^\]]*]\(\s*)(<[^>]+>|[^)\s]+)(?=(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\))/g;
+	const withMarkdownUrls = markdown.replace(
+		markdownDestination,
+		(_match, prefix: string, rawUrl: string) => `${prefix}${restoreUrl(rawUrl)}`,
+	);
+
+	return withMarkdownUrls.replace(
+		/(\b(?:src|href|data)=["'])([^"']+)(["'])/g,
+		(_match, prefix: string, rawUrl: string, suffix: string) => {
+			return `${prefix}${restoreUrl(rawUrl)}${suffix}`;
 		},
 	);
+}
+
+function resolveAttachmentUrl(
+	rawUrl: string,
+	attachments: AttachmentCopy[],
+): string | null {
+	let decodedPath: string;
+	try {
+		decodedPath = decodeURIComponent(new URL(rawUrl).pathname)
+			.replace(/^\/+/, "");
+	} catch {
+		return null;
+	}
+
+	const exact = attachments.find((attachment) => {
+		return decodedPath === attachment.sourcePath
+			|| decodedPath.endsWith(`/${attachment.sourcePath}`);
+	});
+	if (exact) return exact.outputRelativePath;
+
+	const basename = decodedPath.split("/").pop() ?? "";
+	const matches = attachments.filter((attachment) => {
+		return attachment.sourcePath.split("/").pop() === basename;
+	});
+	return matches.length === 1 ? matches[0].outputRelativePath : null;
 }
 
 async function waitForPostProcessors(

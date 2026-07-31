@@ -26,6 +26,11 @@ function createMockApp(
 		"assets/image.png": "png",
 		"assets/photo.jpg": "jpg",
 		"assets/doc.pdf": "pdf",
+		"assets/audio.m4a": "m4a",
+		"assets/audio.flac": "flac",
+		"assets/video.webm": "webm",
+		"assets/video.mov": "mov",
+		"assets/video.m4v": "m4v",
 	})) {
 		allFiles.set(path, { path, extension: ext, name: path.split("/").pop()! });
 	}
@@ -51,6 +56,11 @@ function createMockApp(
 					"image.png": "assets/image.png",
 					"photo.jpg": "assets/photo.jpg",
 					"doc.pdf": "assets/doc.pdf",
+					"audio.m4a": "assets/audio.m4a",
+					"audio.flac": "assets/audio.flac",
+					"video.webm": "assets/video.webm",
+					"video.mov": "assets/video.mov",
+					"video.m4v": "assets/video.m4v",
 					"Note": "notes/note.md",
 				};
 				const p = resolved[link];
@@ -72,6 +82,23 @@ describe("AttachmentCollector", () => {
 		expect(result.attachments).toHaveLength(1);
 		expect(result.attachments[0].sourcePath).toBe("assets/image.png");
 	});
+
+	it.each(["audio.m4a", "audio.flac", "video.webm", "video.mov", "video.m4v"])(
+		"collects supported media links: %s",
+		async (link) => {
+			const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
+			const app = createMockApp(
+				{},
+				{ "notes/a.md": [{ link }] },
+			);
+			const collector = new AttachmentCollector(app as never, new Set());
+
+			const result = await collector.collect([mockFile as never]);
+
+			expect(result.attachments).toHaveLength(1);
+			expect(result.attachments[0].sourcePath).toBe(`assets/${link}`);
+		},
+	);
 
 	it("deduplicates attachments", async () => {
 		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
@@ -109,6 +136,22 @@ describe("AttachmentCollector", () => {
 		expect(result.warnings[0]).toContain("missing-image.png");
 	});
 
+	it("collects a markdown image with an optional title", async () => {
+		const mockFile: MockFile = { path: "assets/note.md", extension: "md", name: "note.md" };
+		const app = createMockApp(
+			{},
+			{},
+			{ "assets/note.md": '![alt](image.png "caption")' },
+		);
+		const collector = new AttachmentCollector(app as never, new Set());
+
+		const result = await collector.collect([mockFile as never]);
+
+		expect(result.attachments).toHaveLength(1);
+		expect(result.attachments[0].sourcePath).toBe("assets/image.png");
+		expect(result.warnings).toEqual([]);
+	});
+
 	it("ignores external URLs", async () => {
 		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
 		const app = createMockApp(
@@ -121,6 +164,21 @@ describe("AttachmentCollector", () => {
 
 		expect(result.attachments).toHaveLength(0);
 		expect(result.warnings).toHaveLength(0);
+	});
+
+	it("ignores data URI images", async () => {
+		const mockFile: MockFile = { path: "notes/a.md", extension: "md", name: "a.md" };
+		const app = createMockApp(
+			{},
+			{},
+			{ "notes/a.md": "![alt](data:image/png;base64,AAAA)" },
+		);
+		const collector = new AttachmentCollector(app as never, new Set());
+
+		const result = await collector.collect([mockFile as never]);
+
+		expect(result.attachments).toEqual([]);
+		expect(result.warnings).toEqual([]);
 	});
 
 	it("skips exported paths", async () => {

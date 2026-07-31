@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { LinkRewriter, slugify } from "@/export/LinkRewriter";
 import { AttachmentCopy, ExportProfileId } from "@/types";
+import { extensionForProfile } from "@/export/utils";
 
 function createMockApp() {
 	return {
@@ -9,8 +10,10 @@ function createMockApp() {
 				const map: Record<string, string> = {
 					Note1: "notes/note1.md",
 					Note2: "notes/note2.md",
+					"Note2.md": "notes/note2.md",
 					"image.png": "assets/image.png",
 					"clip.mp4": "assets/clip.mp4",
+					"reference.pdf": "assets/reference.pdf",
 				};
 				const p = map[link];
 				return p ? { path: p } : null;
@@ -23,6 +26,7 @@ function createMockApp() {
 					"notes/note2.md",
 					"assets/image.png",
 					"assets/clip.mp4",
+					"assets/reference.pdf",
 				];
 				return known.includes(path) ? { path } : null;
 			}),
@@ -35,10 +39,30 @@ describe("LinkRewriter", () => {
 	const attachments: AttachmentCopy[] = [
 		{ sourcePath: "assets/image.png", outputRelativePath: "attachments/image.png" },
 		{ sourcePath: "assets/clip.mp4", outputRelativePath: "attachments/clip.mp4" },
+		{ sourcePath: "assets/reference.pdf", outputRelativePath: "assets/reference.pdf" },
 	];
 
 	function makeRewriter(profile: ExportProfileId = "markdown-bundle") {
 		return new LinkRewriter(createMockApp(), exportedPaths, attachments, profile);
+	}
+
+	function makeMappedRewriter(
+		profile: ExportProfileId,
+		mappedExportedPaths = new Set(["notes/note1.md", "notes/note2.md"]),
+	) {
+		const extension = extensionForProfile(profile);
+		return new LinkRewriter(
+			createMockApp(),
+			mappedExportedPaths,
+			attachments,
+			profile,
+			new Map([
+				["notes/note1.md", `exports/note1.${extension}`],
+				["notes/note2.md", `exports/note2.${extension}`],
+			]),
+			`exports/note1.${extension}`,
+			"exports",
+		);
 	}
 
 	it("rewrites wiki link to included note as anchor", () => {
@@ -81,6 +105,67 @@ describe("LinkRewriter", () => {
 		expect(markdown).toBe("[Note1](#note1-intro)");
 	});
 
+	it("turns an included note embed into a normal relative link", () => {
+		const result = makeMappedRewriter("html-document")
+			.rewrite("![[Note2]]", "notes/note1.md");
+
+		expect(result.markdown).toBe("[Note2](note2.html)");
+		expect(result.warnings).toEqual([]);
+	});
+
+	it("preserves a non-exported note embed as a wiki link without embed syntax", () => {
+		const result = makeMappedRewriter(
+			"markdown-bundle",
+			new Set(["notes/note1.md"]),
+		).rewrite("![[Note2]]", "notes/note1.md");
+
+		expect(result.markdown).toBe("[[Note2]]");
+		expect(result.warnings).toEqual([]);
+	});
+
+	describe("markdown links", () => {
+		it("rewrites a local note link to the exported extension and relative path", () => {
+			const result = makeMappedRewriter("html-document").rewrite(
+				"See [Note 2](Note2.md)",
+				"notes/note1.md",
+			);
+			expect(result.markdown).toBe("See [Note 2](note2.html)");
+		});
+
+		it("rewrites a local attachment link to the copied asset", () => {
+			const result = makeMappedRewriter("html-document").rewrite(
+				"[Reference](../assets/reference.pdf)",
+				"notes/note1.md",
+			);
+			expect(result.markdown).toBe("[Reference](assets/reference.pdf)");
+		});
+
+		it("preserves external and fragment-only links", () => {
+			const markdown = "[Web](https://example.com) [Section](#heading)";
+			const result = makeMappedRewriter("html-document")
+				.rewrite(markdown, "notes/note1.md");
+			expect(result.markdown).toBe(markdown);
+			expect(result.warnings).toEqual([]);
+		});
+
+		it("preserves an unknown local link and warns once", () => {
+			const result = makeMappedRewriter("html-document").rewrite(
+				"[Missing](missing.md)",
+				"notes/note1.md",
+			);
+			expect(result.markdown).toBe("[Missing](missing.md)");
+			expect(result.warnings).toEqual(["Unresolved local link: missing.md"]);
+		});
+
+		it("does not rewrite markdown links inside inline code", () => {
+			const markdown = "`[Note 2](Note2.md)`";
+			const result = makeMappedRewriter("html-document")
+				.rewrite(markdown, "notes/note1.md");
+			expect(result.markdown).toBe(markdown);
+			expect(result.warnings).toEqual([]);
+		});
+	});
+
 	describe("markdown image links", () => {
 		it("rewrites markdown image links to attachment paths", () => {
 			const app = createMockApp();
@@ -93,6 +178,14 @@ describe("LinkRewriter", () => {
 			);
 			expect(markdown).toBe("![alt](attachments/image.png)");
 			expect(warnings).toHaveLength(0);
+		});
+
+		it("preserves an optional title while rewriting the destination", () => {
+			const result = makeRewriter("markdown-bundle").rewrite(
+				'![alt](image.png "caption")',
+				"assets/something.md",
+			);
+			expect(result.markdown).toBe('![alt](attachments/image.png "caption")');
 		});
 
 		it("leaves external http image links unchanged", () => {
