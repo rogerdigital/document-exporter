@@ -1,7 +1,12 @@
 import { App } from "obsidian";
 import { AssembledDocument, ExportPlan, DocumentSection } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
-import { renderMarkdownNative, extractObsidianStyles, rewriteAppProtocolUrls } from "@/formats/native-renderer";
+import {
+	extractObsidianStyles,
+	renderMarkdownNative,
+	restoreAttachmentSourceUrls,
+	rewriteAppProtocolUrls,
+} from "@/formats/native-renderer";
 
 export async function renderHtmlDocument(
 	doc: AssembledDocument,
@@ -56,7 +61,16 @@ async function renderSections(
 
 		if (app && typeof document !== "undefined") {
 			try {
-				const result = await renderMarkdownNative(app, s.markdown, s.sourcePath);
+				const renderableMarkdown = restoreAttachmentSourceUrls(
+					s.markdown,
+					s.sourcePath,
+					attachments,
+				);
+				const result = await renderMarkdownNative(
+					app,
+					renderableMarkdown,
+					s.sourcePath,
+				);
 				sectionHtml = rewriteAppProtocolUrls(result.html, attachments);
 				allWarnings.push(...result.warnings);
 			} catch {

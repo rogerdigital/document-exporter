@@ -6,6 +6,7 @@ import {
 	createPdfBrowserWindowOptions,
 	createPdfPrintOptions,
 	encodeAttachmentDataUri,
+	replacePdfAttachmentUrls,
 	renderPdf,
 } from "@/formats/pdf";
 
@@ -154,5 +155,27 @@ describe("PDF rendering", () => {
 		const dataUri = encodeAttachmentDataUri(buffer, "png");
 
 		expect(dataUri).toBe("data:image/png;base64,AP8QgA==");
+	});
+
+	it("replaces a nested relative attachment URL without retaining its parent prefix", () => {
+		const html = [
+			'<img src="../assets/image.png">',
+			'<a href="../../assets/reference.pdf">Reference</a>',
+		].join("");
+
+		const withImage = replacePdfAttachmentUrls(
+			html,
+			"assets/image.png",
+			"data:image/png;base64,abc",
+		);
+		const withPdf = replacePdfAttachmentUrls(
+			withImage,
+			"assets/reference.pdf",
+			"data:application/pdf;base64,xyz",
+		);
+
+		expect(withPdf).toContain('src="data:image/png;base64,abc"');
+		expect(withPdf).toContain('href="data:application/pdf;base64,xyz"');
+		expect(withPdf).not.toContain("../data:");
 	});
 });
