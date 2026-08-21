@@ -3,6 +3,7 @@ export type ExportProfileId = "markdown-bundle" | "html-document" | "pdf" | "doc
 export type ExportSettings = {
 	defaultProfile: ExportProfileId;
 	defaultOutputFolder: string;
+	expandEmbeds: boolean;
 	includeSourcePathComments: boolean;
 	copyAttachments: boolean;
 	overwriteExisting: boolean;
@@ -51,6 +52,7 @@ export type AssembledDocument = {
 export const DEFAULT_SETTINGS: ExportSettings = {
 	defaultProfile: "pdf",
 	defaultOutputFolder: "exports",
+	expandEmbeds: true,
 	includeSourcePathComments: false,
 	copyAttachments: true,
 	overwriteExisting: false,
