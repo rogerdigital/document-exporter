@@ -23,6 +23,14 @@ export default tseslint.config(
       "import/no-nodejs-modules": "off",
     },
   },
+  {
+    files: ["src/**/*.test.ts"],
+    rules: {
+      // Tests hand-polyfill Obsidian DOM globals in jsdom; the rule's
+      // activeWindow.createDiv() suggestion does not type-check there.
+      "obsidianmd/prefer-create-el": "off",
+    },
+  },
   globalIgnores([
     "node_modules",
     "dist",
