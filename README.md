@@ -1,6 +1,6 @@
 # Document Exporter
 
-Export single notes, entire folders, or hand-picked files into PDF, Word, Markdown bundles, and HTML documents. Supports batch export with directory structure preservation.
+Export single notes, entire folders, or hand-picked files into PDF, Word, EPUB, Markdown bundles, and HTML documents. Supports batch export with directory structure preservation.
 
 ![Document Exporter selected files to PDF](docs/images/document-exporter-selected-files-pdf.gif)
 
@@ -10,6 +10,7 @@ Export single notes, entire folders, or hand-picked files into PDF, Word, Markdo
 - **Embed expansion** — note embeds (`![[Note]]`, `![[Note#Heading]]`) are inlined into exports, with cycle detection and a depth limit
 - **PDF** — generates a print-ready `.pdf` with native Obsidian rendering
 - **Word document** — generates a `.docx` document for editing and sharing
+- **EPUB e-book** — generates a self-contained `.epub` with embedded images and a navigable table of contents (desktop and mobile)
 - **Markdown bundle** — creates one `.md` file per source note plus a shared `assets/` directory, with attachments copied and links rewritten
 - **HTML document** — generates a standalone `.html` with table of contents, native rendering, and linked assets
 - **Progress bar with cancel** — visual progress indicator for every export, with a cancel button that preserves already-exported files
@@ -73,6 +74,7 @@ Open **Settings → Document Exporter**. All settings are indexed and searchable
 ## Limitations
 
 - Block-reference embeds (`![[Note#^block]]`) are not expanded
+- EPUB embeds images only; other attachments and links between notes are omitted
 - Dataview queries are not executed during export
 - Canvas files are not supported
 - PDF export requires the desktop app and is not offered on mobile
