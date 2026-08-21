@@ -1,20 +1,26 @@
 import { App, TFile } from "obsidian";
 import { AssembledDocument, DocumentSection } from "@/types";
+import { EmbedExpander } from "@/export/EmbedExpander";
 
 export class DocumentAssembler {
 	private app: App;
 	private includeSourcePaths: boolean;
+	private expandEmbeds: boolean;
 
-	constructor(app: App, includeSourcePaths = false) {
+	constructor(app: App, includeSourcePaths = false, expandEmbeds = false) {
 		this.app = app;
 		this.includeSourcePaths = includeSourcePaths;
+		this.expandEmbeds = expandEmbeds;
 	}
 
 	async assemble(files: TFile[], title?: string): Promise<AssembledDocument> {
 		const sections: DocumentSection[] = [];
+		const warnings: string[] = [];
+		const embeddedPaths = new Set<string>();
+		const expander = this.expandEmbeds ? new EmbedExpander(this.app) : null;
 
 		for (const file of files) {
-			const section = await this.buildSection(file);
+			const section = await this.buildSection(file, expander, warnings, embeddedPaths);
 			sections.push(section);
 		}
 
@@ -27,15 +33,23 @@ export class DocumentAssembler {
 			title: docTitle,
 			sections,
 			attachments: [],
+			warnings,
+			embeddedPaths: [...embeddedPaths],
 		};
 	}
 
-	private async buildSection(file: TFile): Promise<DocumentSection> {
+	private async buildSection(
+		file: TFile,
+		expander: EmbedExpander | null,
+		warnings: string[],
+		embeddedPaths: Set<string>,
+	): Promise<DocumentSection> {
 		const raw = await this.app.vault.read(file);
 		const { body, frontmatter } = stripFrontmatter(raw);
 		let sectionTitle = deriveTitle(file, frontmatter);
 		let contentBody = body;
 
+		// Host title first: an embedded note's leading H1 must not hijack it.
 		const extracted = extractLeadingH1(contentBody);
 		if (extracted) {
 			if (typeof frontmatter.title !== "string") {
@@ -46,16 +60,31 @@ export class DocumentAssembler {
 			}
 		}
 
-		const normalized = normalizeHeadings(contentBody, 1);
+		let fragments = [{ markdown: contentBody, sourcePath: file.path }];
+		if (expander) {
+			const expanded = await expander.expand(contentBody, file.path);
+			fragments = expanded.fragments;
+			warnings.push(...expanded.warnings);
+			for (const path of expanded.embeddedPaths) embeddedPaths.add(path);
+		}
+
+		// Fragments carry exact slices of the original text, so joining with ""
+		// reproduces the unexpanded output byte-for-byte when no embeds exist.
+		const normalized = fragments.map((f) => ({
+			...f,
+			markdown: normalizeHeadings(f.markdown, 1),
+		}));
+		const joined = normalized.map((f) => f.markdown).join("");
 		const markdown = this.includeSourcePaths
-			? `<!-- source: ${file.path} -->\n${normalized}`
-			: normalized;
+			? `<!-- source: ${file.path} -->\n${joined}`
+			: joined;
 
 		return {
 			sourcePath: file.path,
 			title: sectionTitle,
 			markdown,
 			frontmatter,
+			fragments: normalized,
 		};
 	}
 }

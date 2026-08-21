@@ -34,12 +34,18 @@ export type DocumentSection = {
 	title: string;
 	markdown: string;
 	frontmatter: Record<string, unknown>;
+	/** Source-aware pieces from embed expansion; each is rewritten against its own sourcePath. */
+	fragments?: { markdown: string; sourcePath: string }[];
 };
 
 export type AssembledDocument = {
 	title: string;
 	sections: DocumentSection[];
 	attachments: AttachmentCopy[];
+	/** Warnings raised while assembling (e.g. embed resolution). */
+	warnings?: string[];
+	/** Vault paths of notes inlined via embed expansion. */
+	embeddedPaths?: string[];
 };
 
 export const DEFAULT_SETTINGS: ExportSettings = {
