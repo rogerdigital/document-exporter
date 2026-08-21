@@ -84,6 +84,30 @@ describe("extractCodeBlocks / restoreCodeBlocks", () => {
 		expect(text).toBe(md);
 		expect(blocks.length).toBe(0);
 	});
+
+	it("protects tilde fences", () => {
+		const md = "a\n~~~\n[[x]]\n~~~\nb";
+		const { text, blocks } = extractCodeBlocks(md);
+		expect(text).not.toContain("[[x]]");
+		expect(blocks.length).toBe(1);
+		expect(restoreCodeBlocks(text, blocks)).toBe(md);
+	});
+
+	it("protects four-backtick fences containing triple-backtick content", () => {
+		const md = "a\n````\n```js\ncode\n```\n````\nb";
+		const { text, blocks } = extractCodeBlocks(md);
+		expect(text).not.toContain("```js");
+		expect(blocks.length).toBe(1);
+		expect(restoreCodeBlocks(text, blocks)).toBe(md);
+	});
+
+	it("protects double-backtick inline code", () => {
+		const md = "say `` ![[x]] `` aloud";
+		const { text, blocks } = extractCodeBlocks(md);
+		expect(text).not.toContain("![[x]]");
+		expect(blocks.length).toBe(1);
+		expect(restoreCodeBlocks(text, blocks)).toBe(md);
+	});
 });
 
 describe("longestCommonDirPrefix", () => {

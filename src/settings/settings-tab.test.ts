@@ -54,7 +54,10 @@ describe("DocumentExporterSettingTab#getSettingDefinitions", () => {
 
 	it("groups the three advanced toggles under one heading", () => {
 		const defs = makeTab().getSettingDefinitions();
-		const group = defs[2] as {
+		const expandEmbeds = defs[2] as { control: { type: string; key: string } };
+		expect(expandEmbeds.control.type).toBe("toggle");
+		expect(expandEmbeds.control.key).toBe("expandEmbeds");
+		const group = defs[3] as {
 			type: string;
 			heading: string;
 			items: { control: { type: string; key: string; defaultValue: boolean } }[];
@@ -74,7 +77,8 @@ describe("DocumentExporterSettingTab#getSettingDefinitions", () => {
 		const flat = [
 			defs[0],
 			defs[1],
-			...(defs[2] as { items: unknown[] }).items,
+			defs[2],
+			...(defs[3] as { items: unknown[] }).items,
 		] as { aliases?: string[] }[];
 		expect(flat.every((d) => Array.isArray(d.aliases) && d.aliases.length > 0)).toBe(true);
 	});

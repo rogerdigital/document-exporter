@@ -100,7 +100,11 @@ export class ExportRunner {
 			outputPathMap.set(effectivePlan.inputFiles[i], effectivePlan.outputFiles[i]);
 		}
 
-		const assembler = new DocumentAssembler(this.app, settings.includeSourcePathComments);
+		const assembler = new DocumentAssembler(
+			this.app,
+			settings.includeSourcePathComments,
+			settings.expandEmbeds,
+		);
 		const copiedAttachments = new Set<string>();
 		const collector = settings.copyAttachments
 			? new AttachmentCollector(this.app, exportedPaths)
@@ -120,20 +124,29 @@ export class ExportRunner {
 			// Step 1: Assemble single-file document
 			callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[0] : `Assembling ${file.basename}`);
 			const doc = await assembler.assemble([file]);
+			allWarnings.push(...(doc.warnings ?? []));
 			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
-			// Step 2: Collect attachments for this file
+			// Step 2: Collect attachments for this file (embedded notes contribute
+			// their own references; AttachmentCollector only adds non-markdown files)
 			let attachments = effectivePlan.attachmentCopies;
 			if (collector) {
 				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[1] : `Collecting attachments for ${file.basename}`);
-				const collectResult = await collector.collect([file]);
+				const embeddedFiles = (doc.embeddedPaths ?? [])
+					.map((p) => this.app.vault.getAbstractFileByPath(p))
+					.filter(
+						(f): f is import("obsidian").TFile =>
+							f !== null && "extension" in f && (f as import("obsidian").TFile).extension === "md",
+					);
+				const collectResult = await collector.collect([file, ...embeddedFiles]);
 				attachments = collectResult.attachments;
 				allWarnings.push(...collectResult.warnings);
 			}
 			doc.attachments = attachments;
 			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
-			// Step 3: Rewrite links
+			// Step 3: Rewrite links — per fragment, so content from embedded notes
+			// resolves against its own source path rather than the host's.
 			callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[2] : `Rewriting links in ${file.basename}`);
 			const rewriter = new LinkRewriter(
 				this.app,
@@ -145,9 +158,15 @@ export class ExportRunner {
 				assetsRoot,
 			);
 			for (const section of doc.sections) {
-				const result = rewriter.rewrite(section.markdown, section.sourcePath);
-				section.markdown = result.markdown;
-				allWarnings.push(...result.warnings);
+				const fragments = section.fragments
+					?? [{ markdown: section.markdown, sourcePath: section.sourcePath }];
+				const rewritten: string[] = [];
+				for (const fragment of fragments) {
+					const result = rewriter.rewrite(fragment.markdown, fragment.sourcePath);
+					rewritten.push(result.markdown);
+					allWarnings.push(...result.warnings);
+				}
+				section.markdown = rewritten.join("");
 			}
 			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 

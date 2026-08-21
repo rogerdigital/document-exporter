@@ -27,6 +27,11 @@ const SETTING_META = {
 		desc: "Choose the default format when opening the export dialog.",
 		aliases: ["pdf", "word", "docx", "html", "markdown", "file type"],
 	},
+	expandEmbeds: {
+		name: "Expand note embeds",
+		desc: "Inline ![[Note]] embeds into the exported document instead of keeping them as links.",
+		aliases: ["transclusion", "include notes", "inline"],
+	},
 	includeSourcePathComments: {
 		name: "Include source path comments",
 		desc: "Add HTML comments showing the source path of each section.",
@@ -79,6 +84,16 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 					key: "defaultProfile",
 					defaultValue: DEFAULT_SETTINGS.defaultProfile,
 					options: formatOptions,
+				},
+			},
+			{
+				name: SETTING_META.expandEmbeds.name,
+				desc: SETTING_META.expandEmbeds.desc,
+				aliases: [...SETTING_META.expandEmbeds.aliases],
+				control: {
+					type: "toggle",
+					key: "expandEmbeds",
+					defaultValue: DEFAULT_SETTINGS.expandEmbeds,
 				},
 			},
 			{
@@ -178,6 +193,17 @@ export class DocumentExporterSettingTab extends PluginSettingTab {
 				));
 				dd.onChange(async (v) => {
 					this.plugin.settings.defaultProfile = v as ExportProfileId;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName(SETTING_META.expandEmbeds.name)
+			.setDesc(SETTING_META.expandEmbeds.desc)
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.expandEmbeds);
+				toggle.onChange(async (v) => {
+					this.plugin.settings.expandEmbeds = v;
 					await this.plugin.saveSettings();
 				});
 			});

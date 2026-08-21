@@ -213,3 +213,71 @@ describe("normalizeHeadings", () => {
 		expect(result).toContain("### Another Real");
 	});
 });
+
+describe("DocumentAssembler embed expansion", () => {
+	function makeTFile(path: string) {
+		const name = path.split("/").pop() ?? path;
+		return {
+			path,
+			basename: name.replace(/\.md$/, ""),
+			extension: "md",
+			name,
+		};
+	}
+
+	function createApp(files: Record<string, string>, linkmap: Record<string, string> = {}) {
+		return {
+			vault: {
+				read: vi.fn(async (f: { path: string }) => {
+					const content = files[f.path];
+					if (content === undefined) throw new Error(`No such file: ${f.path}`);
+					return content;
+				}),
+				getAbstractFileByPath: vi.fn((p: string) =>
+					files[p] !== undefined ? { path: p, extension: "md" } : null,
+				),
+			},
+			metadataCache: {
+				getFirstLinkpathDest: vi.fn((link: string) => {
+					const dest = linkmap[link];
+					return dest ? { path: dest } : null;
+				}),
+				getFileCache: vi.fn(() => ({})),
+			},
+		};
+	}
+
+	it("expands embeds, reports embedded paths, and keeps fragments source-aware", async () => {
+		const app = createApp({
+			"main.md": "Intro\n\n![[part]]\n\nEnd",
+			"part.md": "Part body",
+		}, { part: "part.md" });
+		const assembler = new DocumentAssembler(app as never, false, true);
+		const doc = await assembler.assemble([makeTFile("main.md") as never]);
+
+		expect(doc.sections[0].fragments?.map((f) => f.sourcePath)).toEqual(["main.md", "part.md", "main.md"]);
+		expect(doc.embeddedPaths).toEqual(["part.md"]);
+		expect(doc.sections[0].markdown).toBe("Intro\n\nPart body\n\nEnd");
+	});
+
+	it("keeps embeds as-is when disabled", async () => {
+		const app = createApp({ "main.md": "![[part]]" }, { part: "part.md" });
+		const assembler = new DocumentAssembler(app as never, false, false);
+		const doc = await assembler.assemble([makeTFile("main.md") as never]);
+
+		expect(doc.sections[0].markdown).toBe("![[part]]");
+		expect(doc.embeddedPaths).toEqual([]);
+	});
+
+	it("does not let an embedded leading H1 steal the host title", async () => {
+		const app = createApp({
+			"main.md": "![[chapter]]",
+			"chapter.md": "# Chapter\nBody",
+		}, { chapter: "chapter.md" });
+		const assembler = new DocumentAssembler(app as never, false, true);
+		const doc = await assembler.assemble([makeTFile("main.md") as never]);
+
+		expect(doc.title).toBe("main");
+		expect(doc.sections[0].markdown).toBe("# Chapter\nBody");
+	});
+});

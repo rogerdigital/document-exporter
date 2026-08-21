@@ -68,6 +68,7 @@ function defaultSettings() {
 	return {
 		defaultProfile: "markdown-bundle" as const,
 		defaultOutputFolder: "exports",
+		expandEmbeds: false,
 		includeSourcePathComments: false,
 		copyAttachments: false,
 		overwriteExisting: false,
@@ -516,5 +517,103 @@ describe("ExportRunner", () => {
 				expect.stringContaining("../notes/b.md"),
 			);
 		});
+	});
+});
+
+describe("embed expansion", () => {
+	function createExpandApp(files: Record<string, string>, linkmap: Record<string, string> = {}) {
+		const pathMap = new Map<string, unknown>();
+		for (const path of Object.keys(files)) {
+			if (path.endsWith(".md")) pathMap.set(path, createFile(path));
+			else {
+				const name = path.split("/").pop() ?? path;
+				pathMap.set(path, {
+					path,
+					basename: name.replace(/\.[^.]+$/, ""),
+					extension: name.split(".").pop() ?? "",
+					name,
+				});
+			}
+		}
+		return {
+			vault: {
+				getAbstractFileByPath: vi.fn((p: string) => pathMap.get(p) ?? null),
+				read: vi.fn(async (f: { path: string }) => {
+					const content = files[f.path];
+					if (content === undefined) throw new Error(`missing file: ${f.path}`);
+					return content;
+				}),
+				getMarkdownFiles: vi.fn(() => []),
+				createFolder: vi.fn().mockResolvedValue(undefined),
+				create: vi.fn().mockResolvedValue(undefined),
+				createBinary: vi.fn().mockResolvedValue(undefined),
+				readBinary: vi.fn(() => Promise.resolve(new ArrayBuffer(0))),
+				adapter: {},
+			},
+			metadataCache: {
+				getFileCache: vi.fn(() => ({ frontmatter: {}, links: [], embeds: [] })),
+				getFirstLinkpathDest: vi.fn((link: string) => {
+					const dest = linkmap[link];
+					return dest ? { path: dest } : null;
+				}),
+			},
+		};
+	}
+
+	it("resolves relative links inside expanded embeds against the embedded note's folder", async () => {
+		// Host sits at the vault root; the embedded note and its image live in
+		// notes/. Flat rewriting against the host would resolve ./img.png to the
+		// vault root and miss the attachment entirely.
+		const app = createExpandApp({
+			"main.md": "![[part]]",
+			"notes/part.md": "![alt](./img.png)",
+			"notes/img.png": "",
+		}, { part: "notes/part.md" });
+
+		const plan = makePlan(["main.md"]);
+		const runner = new ExportRunner(app as never);
+		const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText").mockResolvedValue(undefined);
+		const copySpy = vi.spyOn(OutputWriter.prototype, "copyBinaryFile").mockResolvedValue(undefined);
+
+		const result = await runner.run(plan, {
+			...defaultSettings(),
+			copyAttachments: true,
+			expandEmbeds: true,
+		});
+
+		expect(result.success).toBe(true);
+		const written = writeSpy.mock.calls.map((c) => String(c[1])).join("\n");
+		expect(written).toContain("](assets/img.png)");
+		expect(copySpy).toHaveBeenCalledWith("notes/img.png", expect.stringContaining("assets/img.png"));
+
+		writeSpy.mockRestore();
+		copySpy.mockRestore();
+	});
+
+	it("renders fragment-joined markdown into HTML with resolved image paths", async () => {
+		const { renderHtmlDocument } = await import("@/formats/html-document");
+		const markdown = "Intro\n\n![alt](assets/img.png)";
+		const writeText = vi.fn(async (_path: string, _data: string) => undefined);
+		const writer = {
+			ensureFolder: vi.fn().mockResolvedValue(undefined),
+			writeText,
+		};
+		const doc = {
+			title: "Fixture",
+			sections: [{
+				sourcePath: "main.md",
+				title: "Fixture",
+				markdown,
+				frontmatter: {},
+				fragments: [{ markdown: "Intro\n\n", sourcePath: "main.md" }, { markdown: "![alt](./img.png)", sourcePath: "notes/part.md" }],
+			}],
+			attachments: [],
+		};
+		const plan = { outputRoot: "exports", outputFilename: "fixture.md" };
+
+		await renderHtmlDocument(doc, plan as never, writer as never, null, "exports/fixture.html");
+
+		const html = writeText.mock.calls[0][1];
+		expect(html).toContain('src="assets/img.png"');
 	});
 });

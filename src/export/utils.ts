@@ -16,13 +16,27 @@ export function containsTraversal(p: string): boolean {
 const CODE_BLOCK_PLACEHOLDER = "\x00CB";
 const INLINE_CODE_PLACEHOLDER = "\x00IC";
 
+// Fence matchers approximate CommonMark: a closing fence must repeat the
+// opening marker (``` or ~~~, 3+ chars); unclosed fences fall through, and a
+// closing fence longer than its opener with extra backticks/tildes is
+// tolerated via the trailing character class.
+const FENCE_BLOCK_RE = /(^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n\2[`~]*(?=\n|$)/g;
+// Double-backtick spans are extracted first so a lone inner backtick (``a`b``)
+// does not terminate them; single-backtick spans end at the next backtick.
+const INLINE_DOUBLE_CODE_RE = /``((?:[^`\n]|`(?![`]))*?)``/g;
+const INLINE_SINGLE_CODE_RE = /`([^`\n]+)`/g;
+
 export function extractCodeBlocks(md: string): { text: string; blocks: string[] } {
 	const blocks: string[] = [];
-	let text = md.replace(/```[\s\S]*?```/g, (match) => {
+	let text = md.replace(FENCE_BLOCK_RE, (match) => {
 		blocks.push(match);
 		return `${CODE_BLOCK_PLACEHOLDER}${blocks.length - 1}${CODE_BLOCK_PLACEHOLDER}`;
 	});
-	text = text.replace(/`([^`\n]+)`/g, (match) => {
+	text = text.replace(INLINE_DOUBLE_CODE_RE, (match) => {
+		blocks.push(match);
+		return `${INLINE_CODE_PLACEHOLDER}${blocks.length - 1}${INLINE_CODE_PLACEHOLDER}`;
+	});
+	text = text.replace(INLINE_SINGLE_CODE_RE, (match) => {
 		blocks.push(match);
 		return `${INLINE_CODE_PLACEHOLDER}${blocks.length - 1}${INLINE_CODE_PLACEHOLDER}`;
 	});
