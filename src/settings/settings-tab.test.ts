@@ -39,7 +39,7 @@ describe("DocumentExporterSettingTab#getSettingDefinitions", () => {
 		expect(dropdown.control.type).toBe("dropdown");
 		expect(dropdown.control.key).toBe("defaultProfile");
 		expect(Object.keys(dropdown.control.options).sort()).toEqual(
-			["docx", "html-document", "markdown-bundle", "pdf"],
+			["docx", "epub", "html-document", "markdown-bundle", "pdf"],
 		);
 	});
 
@@ -48,7 +48,7 @@ describe("DocumentExporterSettingTab#getSettingDefinitions", () => {
 		const defs = makeTab().getSettingDefinitions();
 		const dropdown = defs[1] as { control: { options: Record<string, string> } };
 		expect(Object.keys(dropdown.control.options).sort()).toEqual(
-			["docx", "html-document", "markdown-bundle"],
+			["docx", "epub", "html-document", "markdown-bundle"],
 		);
 	});
 

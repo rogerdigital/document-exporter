@@ -10,6 +10,7 @@ import type DocumentExporterPlugin from "@/main";
 const PROFILE_LABELS: Record<ExportProfileId, string> = {
 	pdf: "PDF",
 	docx: "Word document",
+	epub: "EPUB e-book",
 	"markdown-bundle": "Markdown bundle",
 	"html-document": "HTML document",
 };
@@ -25,7 +26,7 @@ const SETTING_META = {
 	defaultProfile: {
 		name: "Default export format",
 		desc: "Choose the default format when opening the export dialog.",
-		aliases: ["pdf", "word", "docx", "html", "markdown", "file type"],
+		aliases: ["pdf", "word", "docx", "epub", "e-book", "html", "markdown", "file type"],
 	},
 	expandEmbeds: {
 		name: "Expand note embeds",

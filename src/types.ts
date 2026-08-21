@@ -1,4 +1,4 @@
-export type ExportProfileId = "markdown-bundle" | "html-document" | "pdf" | "docx";
+export type ExportProfileId = "markdown-bundle" | "html-document" | "pdf" | "docx" | "epub";
 
 export type ExportSettings = {
 	defaultProfile: ExportProfileId;

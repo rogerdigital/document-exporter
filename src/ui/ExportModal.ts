@@ -8,6 +8,7 @@ import {
 const PROFILE_OPTIONS: Record<ExportProfileId, string> = {
 	pdf: "PDF",
 	docx: "Word document",
+	epub: "EPUB e-book",
 	"markdown-bundle": "Markdown bundle",
 	"html-document": "HTML document",
 };

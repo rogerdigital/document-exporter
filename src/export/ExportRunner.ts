@@ -8,6 +8,7 @@ import { renderMarkdownBundle } from "@/formats/markdown-bundle";
 import { renderHtmlDocument } from "@/formats/html-document";
 import { renderPdf } from "@/formats/pdf";
 import { renderDocx } from "@/formats/docx";
+import { renderEpub } from "@/formats/epub";
 import { relocatePlan } from "@/export/ExportPlan";
 import { isProfileSupported } from "@/export/ProfileCapabilities";
 
@@ -191,6 +192,9 @@ export class ExportRunner {
 					case "docx":
 						formatWarnings = await renderDocx(doc, effectivePlan, writer, this.app, outputFilePath);
 						break;
+					case "epub":
+						formatWarnings = await renderEpub(doc, effectivePlan, writer, this.app, outputFilePath);
+						break;
 				}
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
@@ -203,8 +207,9 @@ export class ExportRunner {
 			allWarnings.push(...formatWarnings);
 			if (this.cancelled) return this.cancelledResult(outputRoot, completedFiles, files.length);
 
-			// Step 6: Copy attachments (deduplicate across files)
-			if (doc.attachments.length > 0) {
+			// Step 6: Copy attachments (deduplicate across files) — not for EPUB,
+			// whose images are packaged inside the .epub itself.
+			if (effectivePlan.profile !== "epub" && doc.attachments.length > 0) {
 				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[4] : `Copying attachments for ${file.basename}`);
 				await writer.ensureFolder(`${assetsRoot}/assets`);
 				if (this.cancelled) {

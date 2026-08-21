@@ -268,3 +268,41 @@ describe("slugify", () => {
 		expect(slugify("")).toBe("");
 	});
 });
+
+describe("epub degradation", () => {
+	const exportedPaths = new Set(["notes/note1.md", "notes/note2.md"]);
+	const attachments: AttachmentCopy[] = [
+		{ sourcePath: "assets/image.png", outputRelativePath: "attachments/image.png" },
+		{ sourcePath: "assets/clip.mp4", outputRelativePath: "attachments/clip.mp4" },
+		{ sourcePath: "assets/reference.pdf", outputRelativePath: "assets/reference.pdf" },
+	];
+
+	function makeRewriter(profile: ExportProfileId) {
+		return new LinkRewriter(createMockApp(), exportedPaths, attachments, profile);
+	}
+
+	it("degrades non-image attachment embeds to text, not dead links", () => {
+		const result = makeRewriter("epub").rewrite("![[clip.mp4]]", "notes/note1.md");
+		expect(result.markdown).toBe("*clip.mp4 (not embedded in EPUB)*");
+	});
+
+	it("keeps image embeds as markdown images", () => {
+		const result = makeRewriter("epub").rewrite("![[image.png]]", "notes/note1.md");
+		expect(result.markdown).toBe("![image.png](attachments/image.png)");
+	});
+
+	it("degrades wiki links to exported notes to plain text", () => {
+		const result = makeRewriter("epub").rewrite("[[Note2|Other]]", "notes/note1.md");
+		expect(result.markdown).toBe("Other");
+	});
+
+	it("degrades wiki links to attachments to plain text", () => {
+		const result = makeRewriter("epub").rewrite("[[clip.mp4]]", "notes/note1.md");
+		expect(result.markdown).toBe("clip.mp4");
+	});
+
+	it("degrades inline markdown links to attachments to plain text", () => {
+		const result = makeRewriter("epub").rewrite("[clip](clip.mp4)", "notes/note1.md");
+		expect(result.markdown).toBe("clip");
+	});
+});

@@ -3,6 +3,7 @@ import { ExportProfileId } from "@/types";
 const ALL_PROFILES: ExportProfileId[] = [
 	"pdf",
 	"docx",
+	"epub",
 	"markdown-bundle",
 	"html-document",
 ];

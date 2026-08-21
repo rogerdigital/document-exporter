@@ -8,6 +8,7 @@ describe("profile capabilities", () => {
 	it("removes PDF on mobile", () => {
 		expect(getAvailableProfiles(false)).toEqual([
 			"docx",
+			"epub",
 			"markdown-bundle",
 			"html-document",
 		]);

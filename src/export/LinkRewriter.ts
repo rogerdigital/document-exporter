@@ -101,6 +101,9 @@ export class LinkRewriter {
 				const [target, heading] = href.split("#");
 				const dest = this.resolvePath(target, sourcePath);
 				if (dest && this.exportedPaths.has(dest)) {
+					// Each note becomes its own .epub; cross-book links cannot
+					// resolve inside a package, so keep only the label.
+					if (this.profile === "epub") return `${imagePrefix}${label}`;
 					const destination = this.exportedNoteDestination(
 						dest,
 						target,
@@ -117,6 +120,9 @@ export class LinkRewriter {
 					? this.attachments.get(attachmentDest)
 					: undefined;
 				if (attachment) {
+					// Non-image attachments are not packaged in the .epub; a
+					// non-linking image reference is degraded by the renderer.
+					if (this.profile === "epub" && !imagePrefix) return label;
 					const rewrittenPath = this.rewriteAttachmentPath(
 						attachment.outputRelativePath,
 					);
@@ -141,11 +147,13 @@ export class LinkRewriter {
 			}
 
 			if (this.exportedPaths.has(dest)) {
+				if (this.profile === "epub") return displayText;
 				return this.formatExportedNoteLink(dest, displayText, target, heading);
 			}
 
 			const attachment = this.attachments.get(dest);
 			if (attachment) {
+				if (this.profile === "epub") return displayText;
 				return `[${displayText}](${this.rewriteAttachmentPath(attachment.outputRelativePath)})`;
 			}
 
@@ -239,6 +247,14 @@ export class LinkRewriter {
 
 		if (this.profile === "docx" && isImageExtension(ext)) {
 			return `![${link}](${relPath})`;
+		}
+
+		if (this.profile === "epub") {
+			if (isImageExtension(ext)) {
+				return `![${link}](${relPath})`;
+			}
+			// Non-image attachments are not packaged; emit text, not a dead link.
+			return `*${relPath.split("/").pop()} (not embedded in EPUB)*`;
 		}
 
 		// markdown-bundle: use the link text as alt. An empty alt (![](path))

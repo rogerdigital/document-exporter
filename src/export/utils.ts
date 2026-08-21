@@ -68,6 +68,7 @@ export function extensionForProfile(profile: ExportProfileId): string {
 		case "html-document": return "html";
 		case "pdf": return "pdf";
 		case "docx": return "docx";
+		case "epub": return "epub";
 	}
 }
 

@@ -1,7 +1,7 @@
 import { ExportSettings, ExportProfileId, DEFAULT_SETTINGS } from "@/types";
 import { Plugin } from "obsidian";
 
-const VALID_PROFILES: Set<string> = new Set<ExportProfileId>(["markdown-bundle", "html-document", "pdf", "docx"]);
+const VALID_PROFILES: Set<string> = new Set<ExportProfileId>(["markdown-bundle", "html-document", "pdf", "docx", "epub"]);
 
 export async function loadSettings(
 	plugin: Plugin,
