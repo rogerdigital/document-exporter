@@ -213,7 +213,7 @@ function escapeHtmlAttr(text: string): string {
 
 const SAFE_MEDIA_TAG_RE = /<img src="[^"]+" alt="[^"]*" \/>|<video controls src="[^"]+">[^<]*<\/video>|<audio controls src="[^"]+">[^<]*<\/audio>|<object data="[^"]+" type="application\/pdf"><a href="[^"]+">[^<]*<\/a><\/object>/g;
 
-const DEFAULT_CSS = `body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #1a1a1a; }
+export const DEFAULT_CSS = `body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #1a1a1a; }
 h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; }
 section { margin-top: 2em; }
 pre { background: #f5f5f5; padding: 1em; overflow-x: auto; border-radius: 4px; }
