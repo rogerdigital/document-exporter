@@ -7,6 +7,7 @@ Export single notes, entire folders, or hand-picked files into PDF, Word, Markdo
 ## Features
 
 - **Batch export** — export an entire folder or selected files at once, preserving directory structure
+- **Embed expansion** — note embeds (`![[Note]]`, `![[Note#Heading]]`) are inlined into exports, with cycle detection and a depth limit
 - **PDF** — generates a print-ready `.pdf` with native Obsidian rendering
 - **Word document** — generates a `.docx` document for editing and sharing
 - **Markdown bundle** — creates one `.md` file per source note plus a shared `assets/` directory, with attachments copied and links rewritten
@@ -64,13 +65,14 @@ Open **Settings → Document Exporter**. All settings are indexed and searchable
 |---------|-------------|---------|
 | Default export format | Format pre-selected when opening the dialog | PDF |
 | Output folder | Where exported files are saved | `exports` |
+| Expand note embeds | Inline `![[Note]]` embeds into exported documents | On |
 | Include source path comments | Add HTML comments showing each section's origin | Off |
 | Copy attachments | Copy referenced images and files into the export | On |
 | Overwrite existing exports | Overwrite if output already exists; otherwise a timestamped folder is created | Off |
 
 ## Limitations
 
-- Inline note embeds (`![[Note]]`) are preserved as links, not expanded
+- Block-reference embeds (`![[Note#^block]]`) are not expanded
 - Dataview queries are not executed during export
 - Canvas files are not supported
 - PDF export requires the desktop app and is not offered on mobile
