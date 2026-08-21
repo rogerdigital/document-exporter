@@ -1,4 +1,4 @@
-import { App, parseLinktext, resolveSubpath } from "obsidian";
+import { App, TAbstractFile, TFile, parseLinktext, resolveSubpath } from "obsidian";
 import { stripFrontmatter } from "@/export/DocumentAssembler";
 import { extractCodeBlocks, restoreCodeBlocks } from "@/export/utils";
 
@@ -105,16 +105,16 @@ export class EmbedExpander {
 		}
 
 		const file = this.app.vault.getAbstractFileByPath(dest);
-		if (!file || !("extension" in file)) {
+		if (!isTFile(file)) {
 			warnings.push(`Unresolved embed: ${link}`);
 			return keep();
 		}
 
-		const raw = await this.app.vault.read(file as never);
+		const raw = await this.app.vault.read(file);
 		let content: string;
 		if (subpath) {
-			const cache = this.app.metadataCache.getFileCache(file as never);
-			const sub = cache ? resolveSubpath(cache as never, subpath) : null;
+			const cache = this.app.metadataCache.getFileCache(file);
+			const sub = cache ? resolveSubpath(cache, subpath) : null;
 			if (!sub || sub.type !== "heading") {
 				warnings.push(`Heading not found in embed: ${link}`);
 				return keep();
@@ -135,4 +135,8 @@ export class EmbedExpander {
 		const inner = await this.expandText(text, dest, [...stack, identity], warnings);
 		return inner.map((f) => ({ ...f, markdown: restoreCodeBlocks(f.markdown, blocks) }));
 	}
+}
+
+function isTFile(file: TAbstractFile | null): file is TFile {
+	return file !== null && "extension" in file;
 }

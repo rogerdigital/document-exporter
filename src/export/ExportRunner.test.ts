@@ -593,9 +593,10 @@ describe("embed expansion", () => {
 	it("renders fragment-joined markdown into HTML with resolved image paths", async () => {
 		const { renderHtmlDocument } = await import("@/formats/html-document");
 		const markdown = "Intro\n\n![alt](assets/img.png)";
+		const writeText = vi.fn(async (_path: string, _data: string) => undefined);
 		const writer = {
 			ensureFolder: vi.fn().mockResolvedValue(undefined),
-			writeText: vi.fn().mockResolvedValue(undefined),
+			writeText,
 		};
 		const doc = {
 			title: "Fixture",
@@ -610,9 +611,9 @@ describe("embed expansion", () => {
 		};
 		const plan = { outputRoot: "exports", outputFilename: "fixture.md" };
 
-		await renderHtmlDocument(doc as never, plan as never, writer as never, null, "exports/fixture.html");
+		await renderHtmlDocument(doc, plan as never, writer as never, null, "exports/fixture.html");
 
-		const html = String(writer.writeText.mock.calls[0][1]);
+		const html = writeText.mock.calls[0][1];
 		expect(html).toContain('src="assets/img.png"');
 	});
 });
