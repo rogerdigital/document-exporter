@@ -58,7 +58,7 @@ A progress bar appears during export showing the current step or file. Click **C
 
 ## Settings
 
-Open **Settings → Document Exporter**.
+Open **Settings → Document Exporter**. All settings are indexed and searchable from Obsidian's settings search (Obsidian 1.13+).
 
 | Setting | Description | Default |
 |---------|-------------|---------|
