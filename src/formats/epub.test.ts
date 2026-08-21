@@ -69,3 +69,142 @@ describe("buildChapterXhtml", () => {
 		expect(chapter).toContain("<h2>Intro</h2>");
 	});
 });
+
+import { vi } from "vitest";
+import { renderEpub } from "@/formats/epub";
+import type { AssembledDocument, AttachmentCopy, ExportPlan } from "@/types";
+import { readStoredZipEntry } from "@/formats/testZip";
+
+function makeWriter() {
+	let written: Uint8Array | null = null;
+	return {
+		writer: {
+			ensureFolder: vi.fn().mockResolvedValue(undefined),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				written = data;
+				return Promise.resolve();
+			}),
+		},
+		get written() { return written; },
+	};
+}
+
+function makeDoc(markdown: string, attachments: AttachmentCopy[] = []): AssembledDocument {
+	return {
+		title: "Fixture",
+		sections: [{
+			sourcePath: "fixture.md",
+			title: "Fixture",
+			markdown,
+			frontmatter: {},
+		}],
+		attachments,
+	};
+}
+
+const PLAN = {
+	outputRoot: "output",
+	outputFilename: "fixture.epub",
+} as ExportPlan;
+
+describe("renderEpub", () => {
+	it("writes a single .epub", async () => {
+		const w = makeWriter();
+		const paths: string[] = [];
+		w.writer.writeBinary.mockImplementation((path: string) => {
+			paths.push(path);
+			return Promise.resolve();
+		});
+		await renderEpub(makeDoc("# Hello\n\nWorld"), PLAN, w.writer as never, null);
+
+		expect(paths).toEqual(["output/fixture.epub"]);
+	});
+
+	it("puts mimetype first, stored, with no extra field", async () => {
+		const w = makeWriter();
+		await renderEpub(makeDoc("Body"), PLAN, w.writer as never, null);
+		const data = w.written!;
+
+		const view = new DataView(data.buffer, data.byteOffset, 30);
+		expect(view.getUint32(0, true)).toBe(0x04034b50); // local file header
+		const nameLength = view.getUint16(26, true);
+		const extraLength = view.getUint16(28, true);
+		expect(new TextDecoder().decode(data.slice(30, 30 + nameLength))).toBe("mimetype");
+		expect(view.getUint16(8, true)).toBe(0); // stored, no compression
+		expect(extraLength).toBe(0);
+	});
+
+	it("produces container, package, nav, chapter, and stylesheet entries", async () => {
+		const w = makeWriter();
+		await renderEpub(makeDoc("Body"), PLAN, w.writer as never, null);
+		const data = w.written!;
+
+		expect(readStoredZipEntry(data, "mimetype")).toBe("application/epub+zip");
+		expect(readStoredZipEntry(data, "META-INF/container.xml")).toContain("OEBPS/content.opf");
+		expect(readStoredZipEntry(data, "OEBPS/content.opf")).toContain("<dc:title>Fixture</dc:title>");
+		expect(readStoredZipEntry(data, "OEBPS/nav.xhtml")).toContain('epub:type="toc"');
+		expect(readStoredZipEntry(data, "OEBPS/chapter-1.xhtml")).toContain("<p>Body</p>");
+		expect(readStoredZipEntry(data, "OEBPS/styles.css")).toContain("body");
+	});
+
+	it("embeds images under generated names and rewrites references", async () => {
+		const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+		const app = {
+			vault: {
+				getAbstractFileByPath: (path: string) =>
+					path === "vault/my image (1).png" ? { path, extension: "png" } : null,
+				readBinary: async () => pngBytes.buffer,
+			},
+		} as never;
+		const w = makeWriter();
+		const doc = makeDoc("![img](assets/my image (1).png)", [{
+			sourcePath: "vault/my image (1).png",
+			outputRelativePath: "assets/my image (1).png",
+		}]);
+
+		await renderEpub(doc, PLAN, w.writer as never, app);
+		const data = w.written!;
+
+		// Raw filename never reaches the package path or the OPF
+		expect(readStoredZipEntry(data, "OEBPS/images/image-1.png")).toBeDefined();
+		expect(readStoredZipEntry(data, "OEBPS/content.opf")).toContain('id="img1" href="images/image-1.png"');
+		expect(readStoredZipEntry(data, "OEBPS/chapter-1.xhtml")).toContain('src="images/image-1.png"');
+	});
+
+	it("rewrites ../assets/ references from batch exports", async () => {
+		const app = {
+			vault: {
+				getAbstractFileByPath: () => ({ path: "vault/img.png", extension: "png" }),
+				readBinary: async () => new Uint8Array([1]).buffer,
+			},
+		} as never;
+		const w = makeWriter();
+		const doc = makeDoc("![img](../assets/img.png)", [{
+			sourcePath: "vault/img.png",
+			outputRelativePath: "assets/img.png",
+		}]);
+		const plan = { ...PLAN, outputRoot: "output/nested" };
+
+		await renderEpub(doc, plan, w.writer as never, app);
+		expect(readStoredZipEntry(w.written!, "OEBPS/chapter-1.xhtml")).toContain('src="images/image-1.png"');
+	});
+
+	it("degrades stray non-image <img> tags to text instead of dead links", async () => {
+		const w = makeWriter();
+		// No app → no images collected; the markdown image survives rewriting
+		await renderEpub(makeDoc("![clip](assets/clip.mp4)"), PLAN, w.writer as never, null);
+
+		const chapter = readStoredZipEntry(w.written!, "OEBPS/chapter-1.xhtml");
+		expect(chapter).not.toContain("<img");
+		expect(chapter).toContain("<em>");
+	});
+
+	it("strips relative <a> links that have no package target", async () => {
+		const w = makeWriter();
+		await renderEpub(makeDoc("[dead](notes/other.md)"), PLAN, w.writer as never, null);
+
+		const chapter = readStoredZipEntry(w.written!, "OEBPS/chapter-1.xhtml");
+		expect(chapter).not.toContain('<a href="notes/other.md"');
+		expect(chapter).toContain("dead");
+	});
+});
