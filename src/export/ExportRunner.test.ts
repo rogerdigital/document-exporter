@@ -28,6 +28,7 @@ function createMockApp(files: string[]) {
 		},
 		metadataCache: {
 			getFileCache: vi.fn(() => ({ frontmatter: {}, links: [], embeds: [] })),
+			getFirstLinkpathDest: vi.fn((): null => null),
 		},
 	};
 }
@@ -622,7 +623,6 @@ describe("embed expansion diagnostics", () => {
 	it("warns when embeds are present but expansion is disabled", async () => {
 		const app = createMockApp(["a.md"]);
 		app.vault.read.mockResolvedValue("text ![[Other]] end");
-		app.metadataCache.getFirstLinkpathDest = vi.fn(() => null);
 		const plan = makePlan(["a.md"]);
 		const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText").mockResolvedValue(undefined);
 		const runner = new ExportRunner(app as never);
