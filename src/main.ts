@@ -6,7 +6,7 @@ import { ExportModal, ExportModalResult } from "@/ui/ExportModal";
 import { ExportSourceResolver } from "@/export/ExportSourceResolver";
 import { ExportPlanBuilder, validatePlan } from "@/export/ExportPlan";
 import { ExportRunner, ExportProgressCallbacks, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
-import { ProgressNotice } from "@/ui/ProgressNotice";
+import { ProgressNotice, summarizeWarnings } from "@/ui/ProgressNotice";
 
 type NotebookNavigatorMenus = {
 	registerFileMenu?: (callback: (context: NotebookNavigatorFileContext) => void) => () => void;
@@ -218,7 +218,7 @@ export default class DocumentExporterPlugin extends Plugin {
 
 			if (exportResult.success) {
 				const msg = exportResult.warnings.length > 0
-					? `Export complete with ${exportResult.warnings.length} warning(s): ${exportResult.outputRoot}`
+					? `Export complete with ${exportResult.warnings.length} warning(s): ${exportResult.outputRoot} — ${summarizeWarnings(exportResult.warnings)}`
 					: `Export complete: ${exportResult.outputRoot}`;
 				progress.finish(msg);
 			} else {

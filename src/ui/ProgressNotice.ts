@@ -7,6 +7,23 @@ const PROGRESS_TITLE_CLASS = "de-progress-title";
 const PROGRESS_PHASE_CLASS = "de-progress-phase";
 const PROGRESS_CANCEL_CLASS = "de-progress-cancel";
 
+const WARNING_SHOWN_LIMIT = 2;
+const WARNING_MAX_LENGTH = 48;
+
+/**
+ * Compact one-line summary of export warnings for the completion notice, so
+ * the author sees what happened without opening export-report.md.
+ */
+export function summarizeWarnings(warnings: string[], shown = WARNING_SHOWN_LIMIT): string {
+	if (warnings.length === 0) return "";
+	const truncate = (w: string) =>
+		w.length > WARNING_MAX_LENGTH ? `${w.slice(0, WARNING_MAX_LENGTH)}…` : w;
+	const parts = warnings.slice(0, shown).map(truncate);
+	const rest = warnings.length - parts.length;
+	if (rest > 0) parts.push(`+${rest} more`);
+	return `${parts.join("; ")} (see export-report.md)`;
+}
+
 export class ProgressNotice {
 	private notice: Notice | null = null;
 	private title = "";
