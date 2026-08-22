@@ -47,7 +47,7 @@ vi.mock("obsidian", () => ({
 	},
 }));
 
-import { ProgressNotice } from "@/ui/ProgressNotice";
+import { ProgressNotice, summarizeWarnings } from "@/ui/ProgressNotice";
 
 function lastNotice() {
 	return noticeInstances[noticeInstances.length - 1];
@@ -187,5 +187,34 @@ describe("ProgressNotice", () => {
 		p.start(5);
 		p.setTitle("New title");
 		expect(lastNotice().noticeEl.querySelector(".de-progress-title")?.textContent).toBe("New title");
+	});
+});
+
+describe("summarizeWarnings", () => {
+	it("returns empty string for no warnings", () => {
+		expect(summarizeWarnings([])).toBe("");
+	});
+
+	it("shows a single warning with the report pointer", () => {
+		expect(summarizeWarnings(["Unresolved link: A"]))
+			.toBe("Unresolved link: A (see export-report.md)");
+	});
+
+	it("joins two warnings with semicolons", () => {
+		expect(summarizeWarnings(["Unresolved link: A", "Unresolved link: B"]))
+			.toBe("Unresolved link: A; Unresolved link: B (see export-report.md)");
+	});
+
+	it("collapses extra warnings into a counter", () => {
+		expect(summarizeWarnings(["a", "b", "c", "d"]))
+			.toBe("a; b; +2 more (see export-report.md)");
+	});
+
+	it("truncates long warnings", () => {
+		const long = `Unresolved link: ${"很长的笔记名".repeat(20)}`;
+		const summary = summarizeWarnings([long]);
+		expect(summary.length).toBeLessThan(80);
+		expect(summary).toContain("…");
+		expect(summary).toContain("(see export-report.md)");
 	});
 });
