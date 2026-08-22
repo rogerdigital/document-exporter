@@ -28,6 +28,7 @@ function createMockApp(files: string[]) {
 		},
 		metadataCache: {
 			getFileCache: vi.fn(() => ({ frontmatter: {}, links: [], embeds: [] })),
+			getFirstLinkpathDest: vi.fn((): null => null),
 		},
 	};
 }
@@ -615,5 +616,36 @@ describe("embed expansion", () => {
 
 		const html = writeText.mock.calls[0][1];
 		expect(html).toContain('src="assets/img.png"');
+	});
+});
+
+describe("embed expansion diagnostics", () => {
+	it("warns when embeds are present but expansion is disabled", async () => {
+		const app = createMockApp(["a.md"]);
+		app.vault.read.mockResolvedValue("text ![[Other]] end");
+		const plan = makePlan(["a.md"]);
+		const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText").mockResolvedValue(undefined);
+		const runner = new ExportRunner(app as never);
+
+		const result = await runner.run(plan, { ...defaultSettings(), expandEmbeds: false });
+
+		expect(result.warnings).toContain(
+			"Note embeds were not expanded (Expand note embeds setting is off)",
+		);
+		writeSpy.mockRestore();
+	});
+
+	it("does not warn when expansion is enabled", async () => {
+		const app = createMockApp(["a.md"]);
+		const plan = makePlan(["a.md"]);
+		const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText").mockResolvedValue(undefined);
+		const runner = new ExportRunner(app as never);
+
+		const result = await runner.run(plan, { ...defaultSettings(), expandEmbeds: true });
+
+		expect(result.warnings).not.toContain(
+			"Note embeds were not expanded (Expand note embeds setting is off)",
+		);
+		writeSpy.mockRestore();
 	});
 });
