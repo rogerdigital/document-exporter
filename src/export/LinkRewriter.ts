@@ -7,6 +7,7 @@ const WIKI_EMBED_RE = /!\[\[([^\]]+)]]/g;
 const MARKDOWN_INLINE_LINK_RE =
 	/(!?)\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
 const EMBED_PLACEHOLDER = "\uE000WE";
+const ATTACHMENT_BLOCK_PLACEHOLDER = "\uE001AB";
 
 export interface RewriteResult {
 	markdown: string;
@@ -47,9 +48,10 @@ export class LinkRewriter {
 
 		const { text, blocks } = extractCodeBlocks(markdown);
 		const embedReplacements: string[] = [];
+		const attachmentBlockReplacements: string[] = [];
 
 		// Protect every embed result from the later wiki and Markdown link passes.
-		let result = text.replace(WIKI_EMBED_RE, (match, link: string, offset: number) => {
+		let result = text.replace(WIKI_EMBED_RE, (match, link: string) => {
 			const [rawTarget, alias] = link.split("|");
 			const [target, heading] = rawTarget.split("#");
 			const displayText = alias || target;
@@ -65,12 +67,13 @@ export class LinkRewriter {
 				const replacement = this.formatEmbed(relPath, target);
 				const preservesBlocks = this.profile === "html-document"
 					|| this.profile === "pdf";
-				return storeReplacement(
-					embedReplacements,
-					preservesBlocks && isStandaloneEmbed(text, offset, match.length)
-						? withBlockBoundaries(text, offset, match.length, replacement)
-						: replacement,
-				);
+				return preservesBlocks
+					? storeReplacement(
+						attachmentBlockReplacements,
+						replacement,
+						ATTACHMENT_BLOCK_PLACEHOLDER,
+					)
+					: storeReplacement(embedReplacements, replacement);
 			}
 
 			if (this.exportedPaths.has(dest)) {
@@ -168,6 +171,10 @@ export class LinkRewriter {
 
 		result = restoreReplacements(result, embedReplacements);
 		result = restoreCodeBlocks(result, blocks);
+		result = restoreAttachmentBlockReplacements(
+			result,
+			attachmentBlockReplacements,
+		);
 
 		return { markdown: result, warnings };
 	}
@@ -268,9 +275,13 @@ export class LinkRewriter {
 	}
 }
 
-function storeReplacement(values: string[], value: string): string {
+function storeReplacement(
+	values: string[],
+	value: string,
+	placeholder = EMBED_PLACEHOLDER,
+): string {
 	values.push(value);
-	return `${EMBED_PLACEHOLDER}${values.length - 1}${EMBED_PLACEHOLDER}`;
+	return `${placeholder}${values.length - 1}${placeholder}`;
 }
 
 function restoreReplacements(text: string, values: string[]): string {
@@ -280,44 +291,43 @@ function restoreReplacements(text: string, values: string[]): string {
 	);
 }
 
-function lineBounds(
+function restoreAttachmentBlockReplacements(
 	text: string,
-	start: number,
-	length: number,
-): { lineStart: number; lineEnd: number } {
-	const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-	const nextLf = text.indexOf("\n", start + length);
-	const lineEnd = nextLf === -1
-		? text.length
-		: nextLf > 0 && text[nextLf - 1] === "\r"
-			? nextLf - 1
-			: nextLf;
-	return { lineStart, lineEnd };
-}
-
-function isStandaloneEmbed(text: string, start: number, length: number): boolean {
-	const { lineStart, lineEnd } = lineBounds(text, start, length);
-	return text.slice(lineStart, start).trim() === ""
-		&& text.slice(start + length, lineEnd).trim() === "";
-}
-
-function withBlockBoundaries(
-	text: string,
-	start: number,
-	length: number,
-	replacement: string,
+	values: string[],
 ): string {
-	const { lineStart, lineEnd } = lineBounds(text, start, length);
-	const before = text.slice(0, lineStart);
-	const after = text.slice(lineEnd);
+	if (values.length === 0) return text;
+
 	const eol = text.includes("\r\n") ? "\r\n" : "\n";
-	const hasLeadingBoundary = before === ""
-		|| /(?:\r?\n)[\t ]*(?:\r?\n)[\t ]*$/.test(before);
-	const followedByStandaloneEmbed = /^[\t ]*\r?\n[\t ]*!\[\[[^\]]+]][\t ]*(?=\r?\n|$)/.test(after);
-	const hasTrailingBoundary = after === ""
-		|| /^[\t ]*\r?\n[\t ]*\r?\n/.test(after)
-		|| followedByStandaloneEmbed;
-	return `${hasLeadingBoundary ? "" : eol}${replacement}${hasTrailingBoundary ? "" : eol}`;
+	const token = `${ATTACHMENT_BLOCK_PLACEHOLDER}(\\d+)${ATTACHMENT_BLOCK_PLACEHOLDER}`;
+	const standaloneRe = new RegExp(`^([\\t ]*)${token}([\\t ]*)$`);
+	const inlineRe = new RegExp(token, "g");
+	const lines = text.split(/\r?\n/).map((line) => {
+		const standalone = line.match(standaloneRe);
+		if (standalone) {
+			return {
+				text: `${standalone[1]}${values[Number(standalone[2])]}${standalone[3]}`,
+				isBlock: true,
+			};
+		}
+		return {
+			text: line.replace(inlineRe, (_match, index: string) => values[Number(index)]),
+			isBlock: false,
+		};
+	});
+
+	const output: string[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (line.isBlock && output.length > 0 && output[output.length - 1].trim() !== "") {
+			output.push("");
+		}
+		output.push(line.text);
+		if (line.isBlock && i < lines.length - 1 && lines[i + 1].text.trim() !== "") {
+			output.push("");
+		}
+	}
+
+	return output.join(eol);
 }
 
 function isExternalOrFragmentLink(href: string): boolean {

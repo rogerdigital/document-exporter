@@ -258,6 +258,30 @@ describe("LinkRewriter", () => {
 				);
 			});
 
+			it("separates a standalone attachment from a following fenced code block", () => {
+				const result = makeRewriter("pdf").rewrite(
+					"![[image.png]]\n```text\ncode\n```",
+					"notes/note1.md",
+				);
+
+				expect(result.markdown).toBe([
+					'<img src="attachments/image.png" alt="image.png" />',
+					"```text\ncode\n```",
+				].join("\n\n"));
+			});
+
+			it("separates a standalone attachment from a preceding fenced code block", () => {
+				const result = makeRewriter("pdf").rewrite(
+					"```text\ncode\n```\n![[image.png]]",
+					"notes/note1.md",
+				);
+
+				expect(result.markdown).toBe([
+					"```text\ncode\n```",
+					'<img src="attachments/image.png" alt="image.png" />',
+				].join("\n\n"));
+			});
+
 			it("does not duplicate existing blank boundaries", () => {
 				const source = "Intro\n\n![[clip.mp4]]\n\n## Title";
 				const result = makeRewriter("pdf").rewrite(source, "notes/note1.md");
