@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildHtmlDoc } from "@/formats/html-document";
+import { buildHtmlDoc, markdownToBasicHtml } from "@/formats/html-document";
 
 describe("HTML Document rendering", () => {
 	describe("TOC generation", () => {
@@ -110,6 +110,57 @@ describe("HTML Document rendering", () => {
 
 			expect(html).toContain("<pre><code>");
 			expect(html).toContain("&lt;div&gt;hi&lt;/div&gt;");
+		});
+	});
+
+	describe("fallback attachment block boundaries", () => {
+		const video = '<video controls src="assets/clip.mp4">clip.mp4</video>';
+
+		it.each([
+			["heading", "## Title", "<h2>Title</h2>"],
+			["unordered list", "- one\n- two", "<ul><li>one</li><li>two</li></ul>"],
+			["ordered list", "1. one\n2. two", "<ol><li>one</li><li>two</li></ol>"],
+			["blockquote", "> quote", "<blockquote>quote</blockquote>"],
+			["table", "| A |\n|---|\n| B |", "<table>"],
+			["fenced code", "```text\ncode\n```", "<pre><code>code\n</code></pre>"],
+			["horizontal rule", "---", "<hr>"],
+			["paragraph", "After", "<p>After</p>"],
+		] as const)("keeps standalone media separate from a following %s", (_name, markdown, expected) => {
+			const html = markdownToBasicHtml(`${video}\n\n${markdown}`);
+
+			expect(html).toContain(`${video}\n${expected}`);
+			expect(html).not.toContain(`<p>${video}`);
+		});
+
+		it("keeps inline media inside its paragraph", () => {
+			const html = markdownToBasicHtml(`Before ${video} after`);
+
+			expect(html).toBe(`<p>Before ${video} after</p>`);
+		});
+
+		it("keeps consecutive standalone attachments as sibling blocks", () => {
+			const image = '<img src="assets/image.png" alt="image.png" />';
+
+			expect(markdownToBasicHtml(`${video}\n\n${image}`)).toBe(`${video}\n${image}`);
+		});
+
+		it("keeps a generic attachment separate without trusting raw anchor HTML", () => {
+			const anchor = '<a href="assets/archive.zip">archive.zip</a>';
+
+			expect(markdownToBasicHtml(`${anchor}\n\n## Files`)).toBe(
+				'<p>&lt;a href=&quot;assets/archive.zip&quot;&gt;archive.zip&lt;/a&gt;</p>\n<h2>Files</h2>',
+			);
+		});
+
+		it.each([
+			"javascript:alert(1)",
+			"&#x6a;avascript:alert(1)",
+			"//example.com/file.zip",
+		])("escapes an untrusted anchor destination %s", (href) => {
+			const html = markdownToBasicHtml(`<a href="${href}">click</a>`);
+
+			expect(html).toContain("&lt;a href=&quot;");
+			expect(html).not.toContain("<a href=");
 		});
 	});
 

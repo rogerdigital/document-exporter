@@ -174,6 +174,9 @@ export function markdownToBasicHtml(md: string): string {
 		.map((block) => {
 			const trimmed = block.trim();
 			if (!trimmed) return "";
+			if (/^(?:MB|CB)\d+$/.test(trimmed)) {
+				return trimmed;
+			}
 			if (/^<(h[1-6]|pre|ul|ol|li|section|div|img|blockquote|table|nav|hr)/.test(trimmed)) {
 				return trimmed;
 			}

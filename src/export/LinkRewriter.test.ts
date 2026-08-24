@@ -14,6 +14,8 @@ function createMockApp() {
 					"image.png": "assets/image.png",
 					"clip.mp4": "assets/clip.mp4",
 					"reference.pdf": "assets/reference.pdf",
+					"song.mp3": "assets/song.mp3",
+					"archive.zip": "assets/archive.zip",
 				};
 				const p = map[link];
 				return p ? { path: p } : null;
@@ -27,6 +29,8 @@ function createMockApp() {
 					"assets/image.png",
 					"assets/clip.mp4",
 					"assets/reference.pdf",
+					"assets/song.mp3",
+					"assets/archive.zip",
 				];
 				return known.includes(path) ? { path } : null;
 			}),
@@ -40,6 +44,8 @@ describe("LinkRewriter", () => {
 		{ sourcePath: "assets/image.png", outputRelativePath: "attachments/image.png" },
 		{ sourcePath: "assets/clip.mp4", outputRelativePath: "attachments/clip.mp4" },
 		{ sourcePath: "assets/reference.pdf", outputRelativePath: "assets/reference.pdf" },
+		{ sourcePath: "assets/song.mp3", outputRelativePath: "attachments/song.mp3" },
+		{ sourcePath: "assets/archive.zip", outputRelativePath: "attachments/archive.zip" },
 	];
 
 	function makeRewriter(profile: ExportProfileId = "markdown-bundle") {
@@ -223,6 +229,109 @@ describe("LinkRewriter", () => {
 			const rewriter = makeRewriter("html-document");
 			const { markdown } = rewriter.rewrite("![[clip.mp4]]", "notes/note1.md");
 			expect(markdown).toBe('<video controls src="attachments/clip.mp4">clip.mp4</video>');
+		});
+
+		describe("standalone attachment boundaries", () => {
+			it.each([
+				["html-document", "image.png", '<img src="attachments/image.png" alt="image.png" />'],
+				["pdf", "clip.mp4", '<video controls src="attachments/clip.mp4">clip.mp4</video>'],
+				["html-document", "song.mp3", '<audio controls src="attachments/song.mp3">song.mp3</audio>'],
+				["pdf", "reference.pdf", '<object data="assets/reference.pdf" type="application/pdf"><a href="assets/reference.pdf">reference.pdf</a></object>'],
+				["html-document", "archive.zip", '<a href="attachments/archive.zip">archive.zip</a>'],
+			] as const)("separates a standalone %s attachment from a following heading", (profile, link, replacement) => {
+				const result = makeRewriter(profile).rewrite(
+					`![[${link}]]\n## Title`,
+					"notes/note1.md",
+				);
+
+				expect(result.markdown).toBe(`${replacement}\n\n## Title`);
+			});
+
+			it("adds a leading boundary when standalone media follows content", () => {
+				const result = makeRewriter("pdf").rewrite(
+					"Intro\n![[clip.mp4]]",
+					"notes/note1.md",
+				);
+
+				expect(result.markdown).toBe(
+					'Intro\n\n<video controls src="attachments/clip.mp4">clip.mp4</video>',
+				);
+			});
+
+			it("separates a standalone attachment from a following fenced code block", () => {
+				const result = makeRewriter("pdf").rewrite(
+					"![[image.png]]\n```text\ncode\n```",
+					"notes/note1.md",
+				);
+
+				expect(result.markdown).toBe([
+					'<img src="attachments/image.png" alt="image.png" />',
+					"```text\ncode\n```",
+				].join("\n\n"));
+			});
+
+			it("separates a standalone attachment from a preceding fenced code block", () => {
+				const result = makeRewriter("pdf").rewrite(
+					"```text\ncode\n```\n![[image.png]]",
+					"notes/note1.md",
+				);
+
+				expect(result.markdown).toBe([
+					"```text\ncode\n```",
+					'<img src="attachments/image.png" alt="image.png" />',
+				].join("\n\n"));
+			});
+
+			it("does not duplicate existing blank boundaries", () => {
+				const source = "Intro\n\n![[clip.mp4]]\n\n## Title";
+				const result = makeRewriter("pdf").rewrite(source, "notes/note1.md");
+
+				expect(result.markdown).toBe(
+					'Intro\n\n<video controls src="attachments/clip.mp4">clip.mp4</video>\n\n## Title',
+				);
+			});
+
+			it("uses one blank boundary between consecutive standalone attachments", () => {
+				const result = makeRewriter("pdf").rewrite(
+					"![[image.png]]\n![[clip.mp4]]\n## Title",
+					"notes/note1.md",
+				);
+
+				expect(result.markdown).toBe([
+					'<img src="attachments/image.png" alt="image.png" />',
+					'<video controls src="attachments/clip.mp4">clip.mp4</video>',
+					"## Title",
+				].join("\n\n"));
+			});
+
+			it("does not add outer whitespace to a document-only embed", () => {
+				const result = makeRewriter("pdf").rewrite("![[clip.mp4]]", "notes/note1.md");
+
+				expect(result.markdown).toBe(
+					'<video controls src="attachments/clip.mp4">clip.mp4</video>',
+				);
+			});
+
+			it.each([
+				"Text ![[clip.mp4]] after",
+				"- ![[clip.mp4]]",
+				"> ![[clip.mp4]]",
+			])("does not inject top-level boundaries for %s", (source) => {
+				const result = makeRewriter("pdf").rewrite(source, "notes/note1.md");
+
+				expect(result.markdown).not.toContain("\n\n");
+			});
+
+			it("does not change markdown-bundle attachment spacing", () => {
+				const result = makeRewriter("markdown-bundle").rewrite(
+					"![[image.png]]\n## Title",
+					"notes/note1.md",
+				);
+
+				expect(result.markdown).toBe(
+					"![image.png](attachments/image.png)\n## Title",
+				);
+			});
 		});
 	});
 
