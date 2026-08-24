@@ -1,6 +1,7 @@
 import { App, TFile } from "obsidian";
-import { AssembledDocument, DocumentSection } from "@/types";
+import { AssembledDocument, DocumentFragment, DocumentSection } from "@/types";
 import { EmbedExpander } from "@/export/EmbedExpander";
+import { joinMarkdownFragments } from "@/export/FragmentJoiner";
 
 export class DocumentAssembler {
 	private app: App;
@@ -60,7 +61,10 @@ export class DocumentAssembler {
 			}
 		}
 
-		let fragments = [{ markdown: contentBody, sourcePath: file.path }];
+		let fragments: DocumentFragment[] = [{
+			markdown: contentBody,
+			sourcePath: file.path,
+		}];
 		if (expander) {
 			const expanded = await expander.expand(contentBody, file.path);
 			fragments = expanded.fragments;
@@ -68,13 +72,13 @@ export class DocumentAssembler {
 			for (const path of expanded.embeddedPaths) embeddedPaths.add(path);
 		}
 
-		// Fragments carry exact slices of the original text, so joining with ""
-		// reproduces the unexpanded output byte-for-byte when no embeds exist.
+		// Unmarked fragments still join byte-for-byte; successful note
+		// transclusions carry block-boundary metadata.
 		const normalized = fragments.map((f) => ({
 			...f,
 			markdown: normalizeHeadings(f.markdown, 1),
 		}));
-		const joined = normalized.map((f) => f.markdown).join("");
+		const joined = joinMarkdownFragments(normalized);
 		const markdown = this.includeSourcePaths
 			? `<!-- source: ${file.path} -->\n${joined}`
 			: joined;

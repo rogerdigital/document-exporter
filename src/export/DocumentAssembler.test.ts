@@ -260,6 +260,22 @@ describe("DocumentAssembler embed expansion", () => {
 		expect(doc.sections[0].markdown).toBe("Intro\n\nPart body\n\nEnd");
 	});
 
+	it("assembles an inline note transclusion as an independent block", async () => {
+		const app = createApp({
+			"main.md": "Before ![[part]] after",
+			"part.md": "## Part",
+		}, { part: "part.md" });
+		const assembler = new DocumentAssembler(app as never, false, true);
+		const doc = await assembler.assemble([makeTFile("main.md") as never]);
+
+		expect(doc.sections[0].markdown).toBe("Before\n\n## Part\n\nafter");
+		expect(doc.sections[0].fragments?.[1]).toMatchObject({
+			sourcePath: "part.md",
+			blockBoundaryBefore: true,
+			blockBoundaryAfter: true,
+		});
+	});
+
 	it("keeps embeds as-is when disabled", async () => {
 		const app = createApp({ "main.md": "![[part]]" }, { part: "part.md" });
 		const assembler = new DocumentAssembler(app as never, false, false);
