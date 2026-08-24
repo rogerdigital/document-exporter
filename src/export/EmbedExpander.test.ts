@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EmbedExpander } from "@/export/EmbedExpander";
+import { joinMarkdownFragments } from "@/export/FragmentJoiner";
 
 type HeadingSub = {
 	type: "heading";
@@ -104,6 +105,7 @@ describe("EmbedExpander", () => {
 		});
 		const result = await new EmbedExpander(app).expand("![[a]]", "root.md");
 		expect(result.fragments.map((f) => f.markdown).join("")).toBe("B start\nC body\nB end");
+		expect(joinMarkdownFragments(result.fragments)).toBe("B start\n\nC body\n\nB end");
 		expect(result.fragments[0].blockBoundaryBefore).toBe(true);
 		expect(result.fragments.at(-1)?.blockBoundaryAfter).toBe(true);
 		const nested = result.fragments.find((f) => f.sourcePath === "c.md");
@@ -143,6 +145,7 @@ describe("EmbedExpander", () => {
 		const result = await new EmbedExpander(app).expand("![[note#One]] ![[note#Two]]", "main.md");
 		expect(result.warnings).toEqual([]);
 		expect(result.fragments.map((f) => f.markdown).join("")).toBe("## One\nA ## Two\nB");
+		expect(joinMarkdownFragments(result.fragments)).toBe("## One\nA\n\n## Two\nB");
 	});
 
 	it("keeps the embed and warns at the depth limit", async () => {

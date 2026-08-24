@@ -119,4 +119,37 @@ describe("joinMarkdownFragments", () => {
 			}),
 		])).toBe("Outer\n\nInner");
 	});
+
+	it.each([
+		"# H1",
+		"## H2",
+		"### H3",
+		"#### H4",
+		"##### H5",
+		"###### H6",
+		"- unordered",
+		"1. ordered",
+		"> quote",
+		"| A | B |\n| --- | --- |\n| 1 | 2 |",
+		"```ts\nconst value = 1;\n```",
+		"    indented code",
+		"---",
+		"ordinary paragraph",
+	])("separates embedded Markdown block %s from host content", (markdown) => {
+		expect(joinMarkdownFragments([
+			fragment("Before "),
+			fragment(markdown, {
+				blockBoundaryBefore: true,
+				blockBoundaryAfter: true,
+			}),
+			fragment(" after"),
+		])).toBe(`Before\n\n${markdown}\n\nafter`);
+	});
+
+	it("uses the embedded fragment's CRLF style when the seam has no newline", () => {
+		expect(joinMarkdownFragments([
+			fragment("Before"),
+			fragment("Part\r\nBody", { blockBoundaryBefore: true }),
+		])).toBe("Before\r\n\r\nPart\r\nBody");
+	});
 });
