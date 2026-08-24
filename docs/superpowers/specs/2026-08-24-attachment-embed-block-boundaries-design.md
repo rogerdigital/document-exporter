@@ -34,18 +34,18 @@ Note transclusion boundary handling will be addressed in a separate pull request
 
 ## Design
 
-### Prefer Markdown semantics where an equivalent exists
+### Preserve existing safe attachment representations
 
 For PDF and HTML profiles:
 
-- Image attachments use standard Markdown image syntax: `![label](path)`.
-- Attachments without an embedded-media representation use standard Markdown link syntax: `[label](path)`.
-- Video, audio, and PDF embeds continue to use generated safe HTML because Markdown has no equivalent embedded-media syntax:
+- Attachment embeds keep their existing generated, escaped HTML representations:
+  - `<img src=...>` for images
   - `<video controls ...>`
   - `<audio controls ...>`
   - `<object data=...>`
+  - `<a href=...>` for other attachments
 
-Markdown images and links are already supported by link restoration, Obsidian native rendering, and the fallback converter. Reusing them removes unnecessary raw HTML from the rendering boundary.
+Changing images or generic attachments to Markdown syntax is intentionally avoided. Copied attachment paths can contain spaces, parentheses, fragments, and other characters that would require broader changes to Markdown destination encoding, native URL restoration, and fallback link parsing. Safe generated HTML already handles those paths without expanding the scope of this fix.
 
 The existing profile-specific behavior for Markdown bundle, DOCX, and EPUB remains unchanged.
 
@@ -67,7 +67,7 @@ Text ![[clip.mp4]]
 
 The four examples are, respectively: standalone, inline, contained in a list item, and contained in a blockquote.
 
-For generated video, audio, and PDF HTML:
+For every resolved attachment replacement in PDF and HTML:
 
 - A standalone replacement must have a Markdown blank-line boundary before and after it when adjacent nonblank content exists.
 - Existing blank lines are preserved and are not multiplied.
@@ -75,15 +75,17 @@ For generated video, audio, and PDF HTML:
 - No unnecessary trailing boundary is added at the end of a document.
 - Inline, list-item, and blockquote replacements do not receive injected blank lines.
 
+Applying the boundary to every standalone attachment is necessary because later constructs do not reliably interrupt a preceding paragraph or raw HTML span. The inserted blank line is an intermediate Markdown separator; it does not emit an empty paragraph in the final HTML or PDF.
+
 The boundary decision belongs in `LinkRewriter`, where the original source context and replacement type are both available. The renderer should not infer whether arbitrary user-authored HTML was originally an attachment embed.
 
 ### Preserve native rendering behavior
 
 PDF and HTML continue to use `renderMarkdownNative` when the Obsidian DOM is available.
 
-- Markdown images are restored from copied output paths to source-relative vault paths before native rendering.
+- Generated attachment URLs continue to be restored from copied output paths to source-relative vault paths before native rendering.
 - Native `app://` URLs are rewritten back to copied attachment paths after rendering.
-- Standalone generated HTML reaches the renderer with explicit Markdown block boundaries.
+- Every standalone resolved attachment reaches the renderer with explicit Markdown block boundaries.
 
 No changes are planned for `renderMarkdownNative`, attachment collection, or URL disambiguation unless runtime verification exposes a regression.
 
@@ -94,7 +96,7 @@ No changes are planned for `renderMarkdownNative`, attachment collection, or URL
 - A protected media placeholder that occupies an entire blank-line-delimited block is restored directly as a block-level sibling.
 - A protected media placeholder mixed with text remains inside the paragraph containing that text.
 - Headings, lists, blockquotes, tables, code fences, and horizontal rules following standalone media must not be wrapped into the media paragraph.
-- Generic attachments use normal Markdown links, so they follow the existing safe link conversion instead of passing raw `<a>` HTML through the escape stage.
+- The exact generated safe `<a href=...>label</a>` form is added to the protected attachment-tag set, so generic attachment links are not displayed as escaped HTML when fallback rendering is used.
 
 This keeps the fallback output valid without broadening the allowlist for arbitrary user-authored HTML.
 
@@ -110,11 +112,11 @@ This keeps the fallback output valid without broadening the allowlist for arbitr
 
 | Source context | Attachment representation | Expected structure |
 | --- | --- | --- |
-| Standalone image followed by H1-H6 | Markdown image | Image and heading are separate blocks |
+| Standalone image followed by H1-H6 | Safe generated HTML with explicit block boundary | Image and heading are separate blocks |
 | Standalone video/audio/PDF followed by H1-H6 | Safe HTML with explicit block boundary | Media and heading are separate blocks |
 | Standalone attachment followed by list, quote, table, fence, or rule | Type-appropriate representation | Following construct remains a Markdown block |
 | Consecutive standalone attachments | Type-appropriate representations | Original order is preserved; attachments do not consume later blocks |
-| Inline image or media in prose | Markdown image or safe inline HTML | Surrounding prose remains one paragraph |
+| Inline image or media in prose | Safe inline HTML | Surrounding prose remains one paragraph |
 | Attachment inside list item or blockquote | Existing container-relative replacement | No top-level blank line breaks the container |
 | Source already contains blank lines | Type-appropriate representation | No extra blank paragraphs are introduced |
 | Attachment copying is disabled | Existing original embed path | Current native-renderer behavior is preserved |
@@ -124,9 +126,9 @@ This keeps the fallback output valid without broadening the allowlist for arbitr
 
 ### `LinkRewriter` unit tests
 
-- Image embeds use Markdown image syntax for PDF and HTML.
-- Generic attachment embeds use Markdown link syntax for PDF and HTML.
-- Standalone video, audio, and PDF embeds receive block boundaries only when required.
+- Existing generated HTML representations remain unchanged for PDF and HTML.
+- Generic attachment anchors are protected in fallback rendering.
+- Every standalone resolved attachment receives block boundaries only when required.
 - Existing blank lines are not duplicated.
 - Beginning-of-document and end-of-document embeds do not gain unnecessary outer whitespace.
 - Inline, list-item, and blockquote embeds do not receive top-level block boundaries.
