@@ -4,7 +4,7 @@
 
 **Goal:** Preserve Markdown block structure after standalone attachment embeds in PDF and HTML exports without changing inline embeds, note transclusion, attachment paths, or other export formats.
 
-**Architecture:** Keep the existing safe HTML emitted by `LinkRewriter`, but classify resolved attachment embeds from their original line context. Add exactly one intermediate Markdown blank-line boundary around top-level standalone replacements when adjacent content exists. Make the basic HTML fallback treat protected attachment and fenced-code placeholders as blocks when they occupy an entire blank-line-delimited block.
+**Architecture:** Keep the existing safe HTML emitted by `LinkRewriter`, but carry PDF/HTML attachment replacements through rewriting with a dedicated placeholder. After protected code blocks are restored, classify marker-only lines as standalone and add exactly one intermediate Markdown blank-line boundary when adjacent content exists. Make the basic HTML fallback treat protected attachment and fenced-code placeholders as blocks when they occupy an entire blank-line-delimited block.
 
 **Tech Stack:** TypeScript, Vitest, Obsidian `MarkdownRenderer`, Electron PDF printing, existing regex-based fallback converter.
 
@@ -12,9 +12,9 @@
 
 ## File Map
 
-- Modify `src/export/LinkRewriter.ts`: detect top-level standalone attachment embeds and add non-duplicating Markdown block boundaries.
+- Modify `src/export/LinkRewriter.ts`: preserve generated PDF/HTML attachment markers until code-block restoration, then add non-duplicating boundaries around marker-only lines.
 - Modify `src/export/LinkRewriter.test.ts`: prove standalone/inline/container behavior for image, video, audio, PDF, and generic attachment replacements.
-- Modify `src/formats/html-document.ts`: protect generated generic attachment anchors and keep standalone protected placeholders outside paragraphs.
+- Modify `src/formats/html-document.ts`: keep standalone protected placeholders outside paragraphs without widening the safe-HTML allowlist.
 - Modify `src/formats/html-document.test.ts`: prove fallback sibling-block structure, inline behavior, consecutive attachments, and unsafe-anchor escaping.
 - Modify `docs/superpowers/specs/2026-08-24-attachment-embed-block-boundaries-design.md`: record the approved implementation correction that retains safe HTML rather than introducing Markdown path encoding.
 
@@ -121,83 +121,20 @@ Expected: the new adjacency expectations fail because current replacements prese
 - Modify: `src/export/LinkRewriter.ts`
 - Test: `src/export/LinkRewriter.test.ts`
 
-- [ ] **Step 1: Pass replacement offsets into attachment formatting**
+- [ ] **Step 1: Keep PDF/HTML attachment replacements identifiable**
 
-Change the wiki-embed replacement callback signature from:
+Store resolved PDF/HTML attachment replacements with a dedicated attachment placeholder instead of the generic embed placeholder. Other profiles, note embeds, and unresolved embeds keep their existing paths.
 
-```ts
-let result = text.replace(WIKI_EMBED_RE, (match, link: string) => {
-```
+- [ ] **Step 2: Restore attachment boundaries after protected code blocks**
 
-to:
+Restore generic embed replacements and fenced code blocks first. Then scan the final lines for attachment-only placeholders:
 
-```ts
-let result = text.replace(WIKI_EMBED_RE, (match, link: string, offset: number) => {
-```
+- marker-only lines are standalone blocks;
+- markers mixed with prose, list syntax, or blockquote syntax stay inline in that line;
+- standalone blocks receive a blank line before and after adjacent nonblank content;
+- existing blank lines and document edges remain unchanged.
 
-Then replace only the existing resolved-attachment branch with this complete branch:
-
-```ts
-const attachment = this.attachments.get(dest);
-if (attachment) {
-	const relPath = this.rewriteAttachmentPath(attachment.outputRelativePath);
-	const replacement = this.formatEmbed(relPath, target);
-	const preservesBlocks = this.profile === "html-document"
-		|| this.profile === "pdf";
-	return storeReplacement(
-		embedReplacements,
-		preservesBlocks && isStandaloneEmbed(text, offset, match.length)
-			? withBlockBoundaries(text, offset, match.length, replacement)
-			: replacement,
-	);
-}
-```
-
-- [ ] **Step 2: Add line-context helpers**
-
-Add pure helpers below `restoreReplacements`:
-
-```ts
-function lineBounds(
-	text: string,
-	start: number,
-	length: number,
-): { lineStart: number; lineEnd: number } {
-	const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-	const nextLf = text.indexOf("\n", start + length);
-	const lineEnd = nextLf === -1
-		? text.length
-		: nextLf > 0 && text[nextLf - 1] === "\r"
-			? nextLf - 1
-			: nextLf;
-	return { lineStart, lineEnd };
-}
-
-function isStandaloneEmbed(text: string, start: number, length: number): boolean {
-	const { lineStart, lineEnd } = lineBounds(text, start, length);
-	return text.slice(lineStart, start).trim() === ""
-		&& text.slice(start + length, lineEnd).trim() === "";
-}
-
-function withBlockBoundaries(
-	text: string,
-	start: number,
-	length: number,
-	replacement: string,
-): string {
-	const { lineStart, lineEnd } = lineBounds(text, start, length);
-	const before = text.slice(0, lineStart);
-	const after = text.slice(lineEnd);
-	const eol = text.includes("\r\n") ? "\r\n" : "\n";
-	const hasLeadingBoundary = before === ""
-		|| /(?:\r?\n)[\t ]*(?:\r?\n)[\t ]*$/.test(before);
-	const hasTrailingBoundary = after === ""
-		|| /^[\t ]*\r?\n[\t ]*\r?\n/.test(after);
-	return `${hasLeadingBoundary ? "" : eol}${replacement}${hasTrailingBoundary ? "" : eol}`;
-}
-```
-
-These helpers inspect the original protected Markdown, not the partially rewritten output. Note embeds and unresolved attachment embeds do not pass through them.
+This order is required because fenced-code protection retains the leading newline in the protected block. Classifying attachments before code restoration can therefore make an attachment followed by a fence appear inline with the temporary code placeholder.
 
 Add one explicit regression assertion showing that a non-PDF/HTML profile keeps its original single newline:
 
@@ -212,6 +149,8 @@ it("does not change markdown-bundle attachment spacing", () => {
 	);
 });
 ```
+
+Add regressions for both attachment-to-fence and fence-to-attachment adjacency so code protection cannot erase either boundary.
 
 - [ ] **Step 3: Run focused tests**
 
@@ -279,17 +218,21 @@ it("keeps consecutive standalone attachments as sibling blocks", () => {
 	expect(markdownToBasicHtml(`${video}\n\n${image}`)).toBe(`${video}\n${image}`);
 });
 
-it("preserves a generated relative attachment anchor", () => {
+it("keeps a generic attachment separate without trusting raw anchor HTML", () => {
 	const anchor = '<a href="assets/archive.zip">archive.zip</a>';
 	expect(markdownToBasicHtml(`${anchor}\n\n## Files`)).toBe(
-		`${anchor}\n<h2>Files</h2>`,
+		'<p>&lt;a href=&quot;assets/archive.zip&quot;&gt;archive.zip&lt;/a&gt;</p>\n<h2>Files</h2>',
 	);
 });
 
-it("still escapes unsafe absolute or scripted anchors", () => {
-	const html = markdownToBasicHtml('<a href="javascript:alert(1)">click</a>');
-	expect(html).toContain("&lt;a href=&quot;javascript:alert(1)&quot;&gt;");
-	expect(html).not.toContain('<a href="javascript:');
+it.each([
+	"javascript:alert(1)",
+	"&#x6a;avascript:alert(1)",
+	"//example.com/file.zip",
+])("escapes an untrusted anchor destination %s", (href) => {
+	const html = markdownToBasicHtml(`<a href="${href}">click</a>`);
+	expect(html).toContain("&lt;a href=&quot;");
+	expect(html).not.toContain("<a href=");
 });
 ```
 
@@ -301,7 +244,7 @@ Run:
 pnpm exec vitest run src/formats/html-document.test.ts
 ```
 
-Expected: standalone media is wrapped in `<p>`, fenced-code placeholders are nested in paragraphs, and generated generic anchors are escaped.
+Expected: standalone media is wrapped in `<p>` and fenced-code placeholders are nested in paragraphs. Generic and unsafe anchors already remain escaped.
 
 ### Task 4: Make fallback placeholders block-aware
 
@@ -309,15 +252,9 @@ Expected: standalone media is wrapped in `<p>`, fenced-code placeholders are nes
 - Modify: `src/formats/html-document.ts`
 - Test: `src/formats/html-document.test.ts`
 
-- [ ] **Step 1: Protect generated relative attachment anchors**
+- [ ] **Step 1: Keep the safe-HTML allowlist unchanged**
 
-Replace `SAFE_MEDIA_TAG_RE` with a named attachment-tag expression that retains the existing exact tags and only accepts relative anchors without a URI scheme or protocol-relative prefix:
-
-```ts
-const SAFE_ATTACHMENT_TAG_RE = /<img src="[^"]+" alt="[^"]*" \/>|<video controls src="[^"]+">[^<]*<\/video>|<audio controls src="[^"]+">[^<]*<\/audio>|<object data="[^"]+" type="application\/pdf"><a href="[^"]+">[^<]*<\/a><\/object>|<a href="(?!(?:[a-z][a-z0-9+.-]*:|\/\/))[^"]+">[^<]*<\/a>/gi;
-```
-
-Use this expression in the existing attachment placeholder extraction step. Keep the placeholder prefix `MB` to minimize production changes.
+Do not add generic `<a>` tags to `SAFE_MEDIA_TAG_RE`. A user-authored anchor can disguise a scripted scheme with an HTML entity such as `&#x6a;avascript:`, so distinguishing a generated relative anchor from arbitrary source HTML would require metadata that is outside this fix. Generic anchors remain escaped in fallback output, while `LinkRewriter`'s blank boundary still keeps the following Markdown block separate.
 
 - [ ] **Step 2: Keep standalone protected placeholders outside paragraphs**
 

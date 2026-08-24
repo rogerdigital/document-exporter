@@ -77,7 +77,7 @@ For every resolved attachment replacement in PDF and HTML:
 
 Applying the boundary to every standalone attachment is necessary because later constructs do not reliably interrupt a preceding paragraph or raw HTML span. The inserted blank line is an intermediate Markdown separator; it does not emit an empty paragraph in the final HTML or PDF.
 
-The boundary decision belongs in `LinkRewriter`, where the original source context and replacement type are both available. The renderer should not infer whether arbitrary user-authored HTML was originally an attachment embed.
+The boundary decision belongs in `LinkRewriter`, which tags generated PDF/HTML attachment replacements with a dedicated placeholder. The placeholder survives wiki-link rewriting and fenced-code protection; after code blocks are restored, `LinkRewriter` classifies marker-only lines as standalone and inserts the required boundaries. Deferring classification until this point prevents a protected fenced block from temporarily consuming the newline after an attachment. The renderer should not infer whether arbitrary user-authored HTML was originally an attachment embed.
 
 ### Preserve native rendering behavior
 
@@ -85,7 +85,7 @@ PDF and HTML continue to use `renderMarkdownNative` when the Obsidian DOM is ava
 
 - Generated attachment URLs continue to be restored from copied output paths to source-relative vault paths before native rendering.
 - Native `app://` URLs are rewritten back to copied attachment paths after rendering.
-- Every standalone resolved attachment reaches the renderer with explicit Markdown block boundaries.
+- Every standalone resolved attachment reaches the renderer with explicit Markdown block boundaries, including when adjacent to a fenced code block.
 
 No changes are planned for `renderMarkdownNative`, attachment collection, or URL disambiguation unless runtime verification exposes a regression.
 
@@ -96,7 +96,7 @@ No changes are planned for `renderMarkdownNative`, attachment collection, or URL
 - A protected media placeholder that occupies an entire blank-line-delimited block is restored directly as a block-level sibling.
 - A protected media placeholder mixed with text remains inside the paragraph containing that text.
 - Headings, lists, blockquotes, tables, code fences, and horizontal rules following standalone media must not be wrapped into the media paragraph.
-- The exact generated safe `<a href=...>label</a>` form is added to the protected attachment-tag set, so generic attachment links are not displayed as escaped HTML when fallback rendering is used.
+- Generic `<a href=...>label</a>` replacements remain escaped in fallback rendering, preserving the current security boundary for user-authored HTML. Their new blank-line boundary still keeps later Markdown blocks structurally separate.
 
 This keeps the fallback output valid without broadening the allowlist for arbitrary user-authored HTML.
 
@@ -127,7 +127,7 @@ This keeps the fallback output valid without broadening the allowlist for arbitr
 ### `LinkRewriter` unit tests
 
 - Existing generated HTML representations remain unchanged for PDF and HTML.
-- Generic attachment anchors are protected in fallback rendering.
+- Generic attachment anchors remain escaped but structurally separate in fallback rendering.
 - Every standalone resolved attachment receives block boundaries only when required.
 - Existing blank lines are not duplicated.
 - Beginning-of-document and end-of-document embeds do not gain unnecessary outer whitespace.
