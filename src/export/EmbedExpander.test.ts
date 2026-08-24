@@ -51,6 +51,14 @@ describe("EmbedExpander", () => {
 
 		expect(result.fragments.map((f) => f.sourcePath)).toEqual(["main.md", "chapter.md", "main.md"]);
 		expect(result.fragments.map((f) => f.markdown)).toEqual(["Intro\n\n", "## Chapter one\nBody", "\n\nOutro"]);
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryBefore");
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryAfter");
+		expect(result.fragments[1]).toMatchObject({
+			blockBoundaryBefore: true,
+			blockBoundaryAfter: true,
+		});
+		expect(result.fragments[2]).not.toHaveProperty("blockBoundaryBefore");
+		expect(result.fragments[2]).not.toHaveProperty("blockBoundaryAfter");
 		expect(result.embeddedPaths).toEqual(["chapter.md"]);
 		expect(result.warnings).toEqual([]);
 	});
@@ -72,6 +80,10 @@ describe("EmbedExpander", () => {
 		);
 		const result = await new EmbedExpander(app).expand("![[note#Beta]]", "main.md");
 		expect(result.fragments[0].markdown).toBe("## Beta\nBeta text\n### Gamma\nGamma text");
+		expect(result.fragments[0]).toMatchObject({
+			blockBoundaryBefore: true,
+			blockBoundaryAfter: true,
+		});
 	});
 
 	it("supports self-embeds with ![[#Heading]]", async () => {
@@ -92,6 +104,13 @@ describe("EmbedExpander", () => {
 		});
 		const result = await new EmbedExpander(app).expand("![[a]]", "root.md");
 		expect(result.fragments.map((f) => f.markdown).join("")).toBe("B start\nC body\nB end");
+		expect(result.fragments[0].blockBoundaryBefore).toBe(true);
+		expect(result.fragments.at(-1)?.blockBoundaryAfter).toBe(true);
+		const nested = result.fragments.find((f) => f.sourcePath === "c.md");
+		expect(nested).toMatchObject({
+			blockBoundaryBefore: true,
+			blockBoundaryAfter: true,
+		});
 		expect(result.embeddedPaths.sort()).toEqual(["a.md", "b.md", "c.md"]);
 	});
 
@@ -103,6 +122,12 @@ describe("EmbedExpander", () => {
 		const result = await new EmbedExpander(app).expand("![[a]]", "root.md");
 		// a expands → b expands → a is on the stack → survives as text
 		expect(result.fragments.map((f) => f.markdown).join("")).toBe("![[a]]");
+		// The fallback does not create a boundary, but it still occupies the
+		// successfully expanded outer note's block.
+		expect(result.fragments[0]).toMatchObject({
+			blockBoundaryBefore: true,
+			blockBoundaryAfter: true,
+		});
 		expect(result.warnings[0]).toMatch(/Circular embed/i);
 	});
 
@@ -126,6 +151,25 @@ describe("EmbedExpander", () => {
 		const app = makeApp(files);
 		const result = await new EmbedExpander(app).expand("![[n0]]", "root.md");
 		expect(result.warnings.some((w) => /depth limit/i.test(w))).toBe(true);
+		const fallback = result.fragments.find((f) => f.markdown.includes("![["));
+		expect(fallback).toMatchObject({
+			blockBoundaryBefore: true,
+			blockBoundaryAfter: true,
+		});
+	});
+
+	it("does not give an inner fallback its own boundary", async () => {
+		const app = makeApp({
+			"wrapper.md": "Before ![[missing]] after",
+		});
+		const result = await new EmbedExpander(app).expand("![[wrapper]]", "root.md");
+		const fallback = result.fragments.find((f) => f.markdown === "![[missing]]");
+
+		expect(fallback).toBeDefined();
+		expect(fallback).not.toHaveProperty("blockBoundaryBefore");
+		expect(fallback).not.toHaveProperty("blockBoundaryAfter");
+		expect(result.fragments[0].blockBoundaryBefore).toBe(true);
+		expect(result.fragments.at(-1)?.blockBoundaryAfter).toBe(true);
 	});
 
 	it("leaves non-markdown embeds untouched", async () => {
@@ -133,6 +177,8 @@ describe("EmbedExpander", () => {
 		const result = await new EmbedExpander(app).expand("![[image.png]]", "main.md");
 		expect(result.fragments[0].markdown).toBe("![[image.png]]");
 		expect(result.fragments[0].sourcePath).toBe("main.md");
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryBefore");
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryAfter");
 		expect(result.embeddedPaths).toEqual([]);
 	});
 
@@ -153,6 +199,8 @@ describe("EmbedExpander", () => {
 		const app = makeApp({ "main.md": "![[note#Missing]]", "note.md": "# Title\nBody" });
 		const result = await new EmbedExpander(app).expand("![[note#Missing]]", "main.md");
 		expect(result.fragments[0].markdown).toBe("![[note#Missing]]");
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryBefore");
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryAfter");
 		expect(result.warnings[0]).toMatch(/Heading not found/i);
 	});
 
@@ -160,7 +208,19 @@ describe("EmbedExpander", () => {
 		const app = makeApp({ "main.md": "![[note#^abc]]", "note.md": "Body" });
 		const result = await new EmbedExpander(app).expand("![[note#^abc]]", "main.md");
 		expect(result.fragments[0].markdown).toBe("![[note#^abc]]");
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryBefore");
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryAfter");
 		expect(result.warnings[0]).toMatch(/Block reference embeds are not supported/i);
+	});
+
+	it("keeps unresolved embeds unmarked", async () => {
+		const app = makeApp({ "main.md": "![[missing]]" });
+		const result = await new EmbedExpander(app).expand("![[missing]]", "main.md");
+
+		expect(result.fragments[0].markdown).toBe("![[missing]]");
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryBefore");
+		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryAfter");
+		expect(result.warnings[0]).toMatch(/Unresolved embed/i);
 	});
 
 	it("strips display aliases before resolving targets", async () => {
