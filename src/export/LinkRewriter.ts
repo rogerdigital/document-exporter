@@ -49,7 +49,7 @@ export class LinkRewriter {
 		const embedReplacements: string[] = [];
 
 		// Protect every embed result from the later wiki and Markdown link passes.
-		let result = text.replace(WIKI_EMBED_RE, (match, link: string) => {
+		let result = text.replace(WIKI_EMBED_RE, (match, link: string, offset: number) => {
 			const [rawTarget, alias] = link.split("|");
 			const [target, heading] = rawTarget.split("#");
 			const displayText = alias || target;
@@ -62,9 +62,14 @@ export class LinkRewriter {
 			const attachment = this.attachments.get(dest);
 			if (attachment) {
 				const relPath = this.rewriteAttachmentPath(attachment.outputRelativePath);
+				const replacement = this.formatEmbed(relPath, target);
+				const preservesBlocks = this.profile === "html-document"
+					|| this.profile === "pdf";
 				return storeReplacement(
 					embedReplacements,
-					this.formatEmbed(relPath, target),
+					preservesBlocks && isStandaloneEmbed(text, offset, match.length)
+						? withBlockBoundaries(text, offset, match.length, replacement)
+						: replacement,
 				);
 			}
 
@@ -273,6 +278,46 @@ function restoreReplacements(text: string, values: string[]): string {
 		new RegExp(`${EMBED_PLACEHOLDER}(\\d+)${EMBED_PLACEHOLDER}`, "g"),
 		(_match, index: string) => values[Number(index)],
 	);
+}
+
+function lineBounds(
+	text: string,
+	start: number,
+	length: number,
+): { lineStart: number; lineEnd: number } {
+	const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+	const nextLf = text.indexOf("\n", start + length);
+	const lineEnd = nextLf === -1
+		? text.length
+		: nextLf > 0 && text[nextLf - 1] === "\r"
+			? nextLf - 1
+			: nextLf;
+	return { lineStart, lineEnd };
+}
+
+function isStandaloneEmbed(text: string, start: number, length: number): boolean {
+	const { lineStart, lineEnd } = lineBounds(text, start, length);
+	return text.slice(lineStart, start).trim() === ""
+		&& text.slice(start + length, lineEnd).trim() === "";
+}
+
+function withBlockBoundaries(
+	text: string,
+	start: number,
+	length: number,
+	replacement: string,
+): string {
+	const { lineStart, lineEnd } = lineBounds(text, start, length);
+	const before = text.slice(0, lineStart);
+	const after = text.slice(lineEnd);
+	const eol = text.includes("\r\n") ? "\r\n" : "\n";
+	const hasLeadingBoundary = before === ""
+		|| /(?:\r?\n)[\t ]*(?:\r?\n)[\t ]*$/.test(before);
+	const followedByStandaloneEmbed = /^[\t ]*\r?\n[\t ]*!\[\[[^\]]+]][\t ]*(?=\r?\n|$)/.test(after);
+	const hasTrailingBoundary = after === ""
+		|| /^[\t ]*\r?\n[\t ]*\r?\n/.test(after)
+		|| followedByStandaloneEmbed;
+	return `${hasLeadingBoundary ? "" : eol}${replacement}${hasTrailingBoundary ? "" : eol}`;
 }
 
 function isExternalOrFragmentLink(href: string): boolean {
