@@ -226,9 +226,13 @@ For the recursive `a -> b -> c` fixture, assert:
 - the last outer fragment ends it;
 - the `c` fragment retains both of its inner-boundary flags.
 
-For attachment, unresolved, missing-heading, circular, block-reference, and
-depth-limit fallbacks, assert that returned fallback fragments have neither
-boundary flag.
+For attachment, unresolved, missing-heading, and block-reference fallbacks at
+the requested transclusion level, assert that returned fallback fragments have
+neither boundary flag. For circular and depth-limit fallbacks reached inside a
+successfully expanded outer note, assert that the fallback does not create an
+inner boundary while the first and last fragments still carry the successful
+outer note's boundary. Use surrounding outer-note text when needed to make the
+two boundary levels distinguishable.
 
 - [ ] **Step 3: Run the focused test and verify RED**
 

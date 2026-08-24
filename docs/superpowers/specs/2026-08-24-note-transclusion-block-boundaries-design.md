@@ -106,7 +106,10 @@ The following paths return the original embed without boundary flags:
 - depth-limit fallbacks.
 
 This distinction prevents failed expansion from changing the author's original
-Markdown structure.
+Markdown structure. If such a fallback is the first or last fragment inside a
+different note that expanded successfully, it may still carry that outer
+transclusion's boundary flag. The fallback does not create a boundary of its
+own; the successful outer note remains an independent block.
 
 ### Join fragments through one boundary-aware helper
 
