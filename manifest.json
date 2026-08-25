@@ -1,7 +1,7 @@
 {
 	"id": "document-exporter",
 	"name": "Document Exporter",
-	"version": "0.7.2",
+	"version": "0.7.3",
 	"minAppVersion": "1.4.0",
 	"description": "Export notes, folders, and selected Markdown files to PDF, Word, Markdown bundles, and HTML.",
 	"author": "Roger Deng",
