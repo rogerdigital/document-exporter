@@ -30,7 +30,7 @@ Multiple ways to start an export:
 ### Export dialog
 
 1. Choose **source** — current file, folder, or selected files
-2. Choose **format** — PDF, Word document, Markdown bundle, or HTML document. PDF is not offered on mobile.
+2. Choose **format** — PDF, Word document, EPUB e-book, Markdown bundle, or HTML document. PDF is not offered on mobile.
 3. Set **output folder** — type a path, click **Vault** to pick from vault folders, or **Choose folder** to select a system folder (desktop only)
 4. Set **file name** (single file) or **folder name** (batch export) — defaults to the source file or folder name
 5. Click **Next** → review the summary → click **Export**
