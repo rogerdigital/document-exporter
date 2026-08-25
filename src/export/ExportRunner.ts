@@ -1,5 +1,5 @@
 import { App, Platform } from "obsidian";
-import { ExportPlan, ExportSettings } from "@/types";
+import { DocumentFragment, ExportPlan, ExportSettings } from "@/types";
 import { DocumentAssembler } from "@/export/DocumentAssembler";
 import { AttachmentCollector } from "@/export/AttachmentCollector";
 import { LinkRewriter } from "@/export/LinkRewriter";
@@ -11,6 +11,7 @@ import { renderDocx } from "@/formats/docx";
 import { renderEpub } from "@/formats/epub";
 import { relocatePlan } from "@/export/ExportPlan";
 import { isProfileSupported } from "@/export/ProfileCapabilities";
+import { joinMarkdownFragments } from "@/export/FragmentJoiner";
 
 export interface ExportResult {
 	success: boolean;
@@ -162,14 +163,14 @@ export class ExportRunner {
 			for (const section of doc.sections) {
 				const fragments = section.fragments
 					?? [{ markdown: section.markdown, sourcePath: section.sourcePath }];
-				const rewritten: string[] = [];
+				const rewritten: DocumentFragment[] = [];
 				for (const fragment of fragments) {
 					if (fragment.markdown.includes("![[")) sawUnexpandedEmbed = true;
 					const result = rewriter.rewrite(fragment.markdown, fragment.sourcePath);
-					rewritten.push(result.markdown);
+					rewritten.push({ ...fragment, markdown: result.markdown });
 					allWarnings.push(...result.warnings);
 				}
-				section.markdown = rewritten.join("");
+				section.markdown = joinMarkdownFragments(rewritten);
 			}
 			// Without this hint, embeds silently degrading to plain text looks
 			// like a broken feature instead of a disabled one.

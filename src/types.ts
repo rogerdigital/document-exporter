@@ -19,6 +19,13 @@ export type AttachmentCopy = {
 	outputRelativePath: string;
 };
 
+export type DocumentFragment = {
+	markdown: string;
+	sourcePath: string;
+	blockBoundaryBefore?: boolean;
+	blockBoundaryAfter?: boolean;
+};
+
 export type ExportPlan = {
 	profile: ExportProfileId;
 	source: ExportSource;
@@ -36,7 +43,7 @@ export type DocumentSection = {
 	markdown: string;
 	frontmatter: Record<string, unknown>;
 	/** Source-aware pieces from embed expansion; each is rewritten against its own sourcePath. */
-	fragments?: { markdown: string; sourcePath: string }[];
+	fragments?: DocumentFragment[];
 };
 
 export type AssembledDocument = {

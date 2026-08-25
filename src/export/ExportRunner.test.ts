@@ -564,10 +564,11 @@ describe("embed expansion", () => {
 	it("resolves relative links inside expanded embeds against the embedded note's folder", async () => {
 		// Host sits at the vault root; the embedded note and its image live in
 		// notes/. Flat rewriting against the host would resolve ./img.png to the
-		// vault root and miss the attachment entirely.
+		// vault root and miss the attachment entirely. The host keeps the embed
+		// inline to prove final rewriting also retains transclusion boundaries.
 		const app = createExpandApp({
-			"main.md": "![[part]]",
-			"notes/part.md": "![alt](./img.png)",
+			"main.md": "Before ![[part]] after",
+			"notes/part.md": "## Part\n![alt](./img.png)",
 			"notes/img.png": "",
 		}, { part: "notes/part.md" });
 
@@ -584,7 +585,9 @@ describe("embed expansion", () => {
 
 		expect(result.success).toBe(true);
 		const written = writeSpy.mock.calls.map((c) => String(c[1])).join("\n");
-		expect(written).toContain("](assets/img.png)");
+		expect(written).toContain(
+			"Before\n\n## Part\n![alt](assets/img.png)\n\nafter",
+		);
 		expect(copySpy).toHaveBeenCalledWith("notes/img.png", expect.stringContaining("assets/img.png"));
 
 		writeSpy.mockRestore();

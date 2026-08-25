@@ -1,17 +1,13 @@
 import { App, TAbstractFile, TFile, parseLinktext, resolveSubpath } from "obsidian";
 import { stripFrontmatter } from "@/export/DocumentAssembler";
 import { extractCodeBlocks, restoreCodeBlocks } from "@/export/utils";
+import type { DocumentFragment } from "@/types";
 
 const WIKI_EMBED_RE = /!\[\[([^\]]+)]]/g;
 const MAX_EMBED_DEPTH = 5;
 
-export interface Fragment {
-	markdown: string;
-	sourcePath: string;
-}
-
 export interface ExpandResult {
-	fragments: Fragment[];
+	fragments: DocumentFragment[];
 	warnings: string[];
 	embeddedPaths: string[];
 }
@@ -43,14 +39,14 @@ export class EmbedExpander {
 		sourcePath: string,
 		stack: string[],
 		warnings: string[],
-	): Promise<Fragment[]> {
+	): Promise<DocumentFragment[]> {
 		// Materialize matches BEFORE awaiting: a shared module-level /g regex
 		// interleaved with async recursion resets lastIndex mid-scan and
 		// loops forever. matchAll() reads from a cloned regex.
 		const matches = [...text.matchAll(WIKI_EMBED_RE)];
 		if (matches.length === 0) return [{ markdown: text, sourcePath }];
 
-		const fragments: Fragment[] = [];
+		const fragments: DocumentFragment[] = [];
 		let lastIndex = 0;
 		for (const match of matches) {
 			const before = text.slice(lastIndex, match.index);
@@ -68,8 +64,8 @@ export class EmbedExpander {
 		sourcePath: string,
 		stack: string[],
 		warnings: string[],
-	): Promise<Fragment[]> {
-		const keep = (): Fragment[] => [{ markdown: `![[${link}]]`, sourcePath }];
+	): Promise<DocumentFragment[]> {
+		const keep = (): DocumentFragment[] => [{ markdown: `![[${link}]]`, sourcePath }];
 		const [rawTarget] = link.split("|");
 		const { path: target, subpath } = parseLinktext(rawTarget);
 
@@ -133,8 +129,24 @@ export class EmbedExpander {
 		// *within* the embedded note must not be expanded either.
 		const { text, blocks } = extractCodeBlocks(content);
 		const inner = await this.expandText(text, dest, [...stack, identity], warnings);
-		return inner.map((f) => ({ ...f, markdown: restoreCodeBlocks(f.markdown, blocks) }));
+		const restored = inner.map((f) => ({
+			...f,
+			markdown: restoreCodeBlocks(f.markdown, blocks),
+		}));
+		return markBlockBoundaries(restored);
 	}
+}
+
+function markBlockBoundaries(
+	fragments: DocumentFragment[],
+): DocumentFragment[] {
+	if (fragments.length === 0) return fragments;
+
+	const marked = [...fragments];
+	marked[0] = { ...marked[0], blockBoundaryBefore: true };
+	const lastIndex = marked.length - 1;
+	marked[lastIndex] = { ...marked[lastIndex], blockBoundaryAfter: true };
+	return marked;
 }
 
 function isTFile(file: TAbstractFile | null): file is TFile {
