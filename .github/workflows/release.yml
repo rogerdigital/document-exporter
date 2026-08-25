@@ -39,6 +39,7 @@ jobs:
         with:
           subject-path: |
             main.js
+            manifest.json
             styles.css
 
       - name: Create release
