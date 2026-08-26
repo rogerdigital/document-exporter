@@ -24,11 +24,12 @@ export class EmbedExpander {
 		const warnings: string[] = [];
 		const { text, blocks } = extractCodeBlocks(markdown);
 		const fragments = await this.expandText(text, sourcePath, [], warnings);
+		const restored = fragments.map((f) => ({
+			...f,
+			markdown: restoreCodeBlocks(f.markdown, blocks),
+		}));
 		return {
-			fragments: fragments.map((f) => ({
-				...f,
-				markdown: restoreCodeBlocks(f.markdown, blocks),
-			})),
+			fragments: coalesceAdjacentFragments(restored),
 			warnings,
 			embeddedPaths: [...this.embeddedPaths],
 		};
@@ -147,6 +148,30 @@ function markBlockBoundaries(
 	const lastIndex = marked.length - 1;
 	marked[lastIndex] = { ...marked[lastIndex], blockBoundaryAfter: true };
 	return marked;
+}
+
+function coalesceAdjacentFragments(
+	fragments: DocumentFragment[],
+): DocumentFragment[] {
+	const result: DocumentFragment[] = [];
+
+	for (const fragment of fragments) {
+		const previous = result.at(-1);
+		if (
+			previous
+			&& previous.sourcePath === fragment.sourcePath
+			&& !previous.blockBoundaryAfter
+			&& !fragment.blockBoundaryBefore
+		) {
+			previous.markdown += fragment.markdown;
+			if (fragment.blockBoundaryAfter) previous.blockBoundaryAfter = true;
+			continue;
+		}
+
+		result.push({ ...fragment });
+	}
+
+	return result;
 }
 
 function isTFile(file: TAbstractFile | null): file is TFile {

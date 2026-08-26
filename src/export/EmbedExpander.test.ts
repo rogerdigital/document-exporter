@@ -161,18 +161,18 @@ describe("EmbedExpander", () => {
 		});
 	});
 
-	it("does not give an inner fallback its own boundary", async () => {
+	it("keeps an inner fallback inside its transclusion boundaries", async () => {
 		const app = makeApp({
 			"wrapper.md": "Before ![[missing]] after",
 		});
 		const result = await new EmbedExpander(app).expand("![[wrapper]]", "root.md");
-		const fallback = result.fragments.find((f) => f.markdown === "![[missing]]");
 
-		expect(fallback).toBeDefined();
-		expect(fallback).not.toHaveProperty("blockBoundaryBefore");
-		expect(fallback).not.toHaveProperty("blockBoundaryAfter");
-		expect(result.fragments[0].blockBoundaryBefore).toBe(true);
-		expect(result.fragments.at(-1)?.blockBoundaryAfter).toBe(true);
+		expect(result.fragments).toEqual([{
+			markdown: "Before ![[missing]] after",
+			sourcePath: "wrapper.md",
+			blockBoundaryBefore: true,
+			blockBoundaryAfter: true,
+		}]);
 	});
 
 	it("leaves non-markdown embeds untouched", async () => {
@@ -183,6 +183,32 @@ describe("EmbedExpander", () => {
 		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryBefore");
 		expect(result.fragments[0]).not.toHaveProperty("blockBoundaryAfter");
 		expect(result.embeddedPaths).toEqual([]);
+	});
+
+	it("keeps a preserved attachment with its following heading in one fragment", async () => {
+		const source = "![[image.png]]\n## Title";
+		const app = makeApp({ "main.md": source, "image.png": "" });
+
+		const result = await new EmbedExpander(app).expand(source, "main.md");
+
+		expect(result.fragments).toEqual([{
+			markdown: source,
+			sourcePath: "main.md",
+		}]);
+	});
+
+	it.each([
+		"Text ![[image.png]] after",
+		"- ![[image.png]]",
+		"> ![[image.png]]",
+	])("keeps preserved attachment context byte-for-byte for %s", async (source) => {
+		const app = makeApp({ "main.md": source, "image.png": "" });
+		const result = await new EmbedExpander(app).expand(source, "main.md");
+
+		expect(result.fragments).toEqual([{
+			markdown: source,
+			sourcePath: "main.md",
+		}]);
 	});
 
 	it("does not expand embeds inside fenced code blocks — including inside embedded notes", async () => {
