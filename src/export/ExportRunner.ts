@@ -108,7 +108,9 @@ export class ExportRunner {
 			settings.expandEmbeds,
 		);
 		const copiedAttachments = new Set<string>();
-		const collector = settings.copyAttachments
+		const needsAttachmentMetadata = settings.copyAttachments
+			|| effectivePlan.profile === "pdf";
+		const collector = needsAttachmentMetadata
 			? new AttachmentCollector(this.app, exportedPaths)
 			: null;
 
@@ -217,7 +219,11 @@ export class ExportRunner {
 
 			// Step 6: Copy attachments (deduplicate across files) — not for EPUB,
 			// whose images are packaged inside the .epub itself.
-			if (effectivePlan.profile !== "epub" && doc.attachments.length > 0) {
+			if (
+				settings.copyAttachments
+				&& effectivePlan.profile !== "epub"
+				&& doc.attachments.length > 0
+			) {
 				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[4] : `Copying attachments for ${file.basename}`);
 				await writer.ensureFolder(`${assetsRoot}/assets`);
 				if (this.cancelled) {

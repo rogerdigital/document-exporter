@@ -1,11 +1,15 @@
-import { afterEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { ExportRunner, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
 import { AttachmentCollector } from "@/export/AttachmentCollector";
 import { OutputWriter } from "@/export/OutputWriter";
 import { Platform } from "obsidian";
 
+const { renderPdfMock } = vi.hoisted(() => ({
+	renderPdfMock: vi.fn(),
+}));
+
 vi.mock("@/formats/pdf", () => ({
-	renderPdf: vi.fn(() => Promise.reject(new Error("PDF generation failed: test failure"))),
+	renderPdf: renderPdfMock,
 }));
 
 function createFile(path: string) {
@@ -98,7 +102,14 @@ function makePdfPlan(files: string[]) {
 	};
 }
 
+beforeEach(() => {
+	renderPdfMock.mockRejectedValue(
+		new Error("PDF generation failed: test failure"),
+	);
+});
+
 afterEach(() => {
+	renderPdfMock.mockReset();
 	vi.restoreAllMocks();
 	Platform.isDesktopApp = true;
 	Platform.isDesktop = true;
@@ -153,13 +164,20 @@ describe("ExportRunner", () => {
 				],
 			};
 			const runner = new ExportRunner(app as never);
+			vi.spyOn(AttachmentCollector.prototype, "collect").mockResolvedValue({
+				attachments: plan.attachmentCopies,
+				warnings: [],
+			});
 			const copySpy = vi.spyOn(OutputWriter.prototype, "copyBinaryFile")
 				.mockImplementationOnce(async () => {
 					runner.cancel();
 				})
 				.mockResolvedValue(undefined);
 
-			const result = await runner.run(plan, defaultSettings());
+			const result = await runner.run(
+				plan,
+				{ ...defaultSettings(), copyAttachments: true },
+			);
 
 			expect(copySpy).toHaveBeenCalledTimes(1);
 			expect(result.success).toBe(false);
@@ -293,6 +311,10 @@ describe("ExportRunner", () => {
 				],
 			};
 			const runner = new ExportRunner(app as never);
+			vi.spyOn(AttachmentCollector.prototype, "collect").mockResolvedValue({
+				attachments: plan.attachmentCopies,
+				warnings: [],
+			});
 
 			const copySpy = vi
 				.spyOn(OutputWriter.prototype, "copyBinaryFile")
@@ -300,7 +322,7 @@ describe("ExportRunner", () => {
 
 			await runner.run(
 				plan as never,
-				{ ...defaultSettings(), copyAttachments: false },
+				{ ...defaultSettings(), copyAttachments: true },
 				{ onFileStart: vi.fn(), onFileComplete: vi.fn(), onPhase: vi.fn() },
 			);
 
@@ -465,12 +487,19 @@ describe("ExportRunner", () => {
 				],
 			};
 			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
+			vi.spyOn(AttachmentCollector.prototype, "collect").mockResolvedValue({
+				attachments: plan.attachmentCopies,
+				warnings: [],
+			});
 			const copySpy = vi.spyOn(OutputWriter.prototype, "copyBinaryFile")
 				.mockResolvedValue(undefined);
 			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
 				.mockResolvedValue(undefined);
 
-			await new ExportRunner(app as never).run(plan, defaultSettings());
+			await new ExportRunner(app as never).run(
+				plan,
+				{ ...defaultSettings(), copyAttachments: true },
+			);
 
 			expect(copySpy).toHaveBeenCalledWith(
 				"images/picture.png",
@@ -592,6 +621,50 @@ describe("embed expansion", () => {
 
 		writeSpy.mockRestore();
 		copySpy.mockRestore();
+	});
+
+	it.each([
+		{ expandEmbeds: true, copyAttachments: true },
+		{ expandEmbeds: true, copyAttachments: false },
+		{ expandEmbeds: false, copyAttachments: true },
+		{ expandEmbeds: false, copyAttachments: false },
+	])("keeps PDF attachment and heading structure for $expandEmbeds/$copyAttachments", async (settings) => {
+		const source = "![[image.png]]\n## Title";
+		const attachment = {
+			sourcePath: "assets/image.png",
+			outputRelativePath: "assets/image.png",
+		};
+		const app = createExpandApp({
+			"main.md": source,
+			"assets/image.png": "",
+		}, { "image.png": "assets/image.png" });
+		const collectSpy = vi.spyOn(AttachmentCollector.prototype, "collect")
+			.mockResolvedValue({ attachments: [attachment], warnings: [] });
+		const copySpy = vi.spyOn(OutputWriter.prototype, "copyBinaryFile")
+			.mockResolvedValue(undefined);
+		renderPdfMock.mockResolvedValue([]);
+
+		const result = await new ExportRunner(app as never).run(
+			makePdfPlan(["main.md"]),
+			{ ...defaultSettings(), ...settings },
+		);
+
+		expect(result.success).toBe(true);
+		expect(collectSpy).toHaveBeenCalledOnce();
+		const renderedDoc = renderPdfMock.mock.calls[0][0];
+		expect(renderedDoc.sections[0].markdown).toBe(
+			'<img src="assets/image.png" alt="image.png" />\n\n## Title',
+		);
+		expect(renderedDoc.attachments).toEqual([attachment]);
+		expect(result.warnings).not.toContain("Unresolved embed: image.png");
+		if (settings.copyAttachments) {
+			expect(copySpy).toHaveBeenCalledWith(
+				"assets/image.png",
+				"exports/assets/image.png",
+			);
+		} else {
+			expect(copySpy).not.toHaveBeenCalled();
+		}
 	});
 
 	it("renders fragment-joined markdown into HTML with resolved image paths", async () => {
