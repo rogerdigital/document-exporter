@@ -1,6 +1,6 @@
 {
   "name": "document-exporter",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Export notes, folders, and selected Markdown files to PDF, Word, Markdown bundles, and HTML.",
   "main": "main.js",
   "scripts": {
