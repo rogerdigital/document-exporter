@@ -661,6 +661,9 @@ describe("embed expansion", () => {
 		);
 		expect(renderedDoc.attachments).toEqual([attachment]);
 		expect(result.warnings).not.toContain("Unresolved embed: image.png");
+		expect(result.warnings).not.toContain(
+			"Note embeds were not expanded (Expand note embeds setting is off)",
+		);
 		if (settings.copyAttachments) {
 			expect(copySpy).toHaveBeenCalledWith(
 				"assets/image.png",

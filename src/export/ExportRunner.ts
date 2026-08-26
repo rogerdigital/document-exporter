@@ -13,6 +13,8 @@ import { relocatePlan } from "@/export/ExportPlan";
 import { isProfileSupported } from "@/export/ProfileCapabilities";
 import { joinMarkdownFragments } from "@/export/FragmentJoiner";
 
+const WIKI_EMBED_RE = /!\[\[([^\]]+)]]/g;
+
 export interface ExportResult {
 	success: boolean;
 	outputRoot: string;
@@ -167,7 +169,15 @@ export class ExportRunner {
 					?? [{ markdown: section.markdown, sourcePath: section.sourcePath }];
 				const rewritten: DocumentFragment[] = [];
 				for (const fragment of fragments) {
-					if (fragment.markdown.includes("![[")) sawUnexpandedEmbed = true;
+					if (
+						!settings.expandEmbeds
+						&& this.containsUnexpandedNoteEmbed(
+							fragment.markdown,
+							fragment.sourcePath,
+						)
+					) {
+						sawUnexpandedEmbed = true;
+					}
 					const result = rewriter.rewrite(fragment.markdown, fragment.sourcePath);
 					rewritten.push({ ...fragment, markdown: result.markdown });
 					allWarnings.push(...result.warnings);
@@ -278,6 +288,25 @@ export class ExportRunner {
 			outputRoot,
 			warnings: [msg],
 		};
+	}
+
+	private containsUnexpandedNoteEmbed(
+		markdown: string,
+		sourcePath: string,
+	): boolean {
+		for (const match of markdown.matchAll(WIKI_EMBED_RE)) {
+			const [rawTarget] = match[1].split("|");
+			const [target] = rawTarget.split("#");
+			if (target === "") return true;
+
+			const dest = this.app.metadataCache.getFirstLinkpathDest(
+				target,
+				sourcePath,
+			);
+			if (!dest || dest.path.toLowerCase().endsWith(".md")) return true;
+		}
+
+		return false;
 	}
 
 	private resolveEffectivePlan(
