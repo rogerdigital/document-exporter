@@ -13,6 +13,8 @@ import { relocatePlan } from "@/export/ExportPlan";
 import { isProfileSupported } from "@/export/ProfileCapabilities";
 import { joinMarkdownFragments } from "@/export/FragmentJoiner";
 
+const WIKI_EMBED_RE = /!\[\[([^\]]+)]]/g;
+
 export interface ExportResult {
 	success: boolean;
 	outputRoot: string;
@@ -108,7 +110,9 @@ export class ExportRunner {
 			settings.expandEmbeds,
 		);
 		const copiedAttachments = new Set<string>();
-		const collector = settings.copyAttachments
+		const needsAttachmentMetadata = settings.copyAttachments
+			|| effectivePlan.profile === "pdf";
+		const collector = needsAttachmentMetadata
 			? new AttachmentCollector(this.app, exportedPaths)
 			: null;
 
@@ -165,7 +169,15 @@ export class ExportRunner {
 					?? [{ markdown: section.markdown, sourcePath: section.sourcePath }];
 				const rewritten: DocumentFragment[] = [];
 				for (const fragment of fragments) {
-					if (fragment.markdown.includes("![[")) sawUnexpandedEmbed = true;
+					if (
+						!settings.expandEmbeds
+						&& this.containsUnexpandedNoteEmbed(
+							fragment.markdown,
+							fragment.sourcePath,
+						)
+					) {
+						sawUnexpandedEmbed = true;
+					}
 					const result = rewriter.rewrite(fragment.markdown, fragment.sourcePath);
 					rewritten.push({ ...fragment, markdown: result.markdown });
 					allWarnings.push(...result.warnings);
@@ -217,7 +229,11 @@ export class ExportRunner {
 
 			// Step 6: Copy attachments (deduplicate across files) — not for EPUB,
 			// whose images are packaged inside the .epub itself.
-			if (effectivePlan.profile !== "epub" && doc.attachments.length > 0) {
+			if (
+				settings.copyAttachments
+				&& effectivePlan.profile !== "epub"
+				&& doc.attachments.length > 0
+			) {
 				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[4] : `Copying attachments for ${file.basename}`);
 				await writer.ensureFolder(`${assetsRoot}/assets`);
 				if (this.cancelled) {
@@ -272,6 +288,25 @@ export class ExportRunner {
 			outputRoot,
 			warnings: [msg],
 		};
+	}
+
+	private containsUnexpandedNoteEmbed(
+		markdown: string,
+		sourcePath: string,
+	): boolean {
+		for (const match of markdown.matchAll(WIKI_EMBED_RE)) {
+			const [rawTarget] = match[1].split("|");
+			const [target] = rawTarget.split("#");
+			if (target === "") return true;
+
+			const dest = this.app.metadataCache.getFirstLinkpathDest(
+				target,
+				sourcePath,
+			);
+			if (!dest || dest.path.toLowerCase().endsWith(".md")) return true;
+		}
+
+		return false;
 	}
 
 	private resolveEffectivePlan(
