@@ -43,13 +43,13 @@ A second attachment-rendering defect exists when `Copy attachments` is disabled.
 
 `EmbedExpander` will coalesce adjacent fragments when all of the following are true:
 
-- neither side declares a block boundary;
+- the left fragment does not declare `blockBoundaryAfter` and the right fragment does not declare `blockBoundaryBefore`;
 - both fragments have the same `sourcePath`;
 - joining them restores the original byte sequence without inserting whitespace.
 
 Preserved attachment embeds, unresolved embeds, and surrounding text from the same note will therefore reach `LinkRewriter` together. Existing attachment-only placeholder logic can then determine whether an embed is standalone using its real line context.
 
-Successful note transclusions remain isolated because `markBlockBoundaries` marks their first and last fragments. Fragments from different source notes are never coalesced, preserving source-relative link resolution.
+Successful note transclusions remain isolated from their host because `markBlockBoundaries` marks their outer seams. Fragments inside one transcluded note may still be coalesced while retaining the note's outer boundary flags. Fragments from different source notes are never coalesced, preserving source-relative link resolution.
 
 This is preferred over passing look-behind and look-ahead text into `LinkRewriter`: it restores information that was unnecessarily fragmented instead of expanding the rewriter interface. Marking every attachment fragment as a block is rejected because it would break inline, list-item, and blockquote embeds.
 
