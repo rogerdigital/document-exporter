@@ -3,9 +3,13 @@ import { ExportRunner, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
 import { AttachmentCollector } from "@/export/AttachmentCollector";
 import { OutputWriter } from "@/export/OutputWriter";
 import { Platform } from "obsidian";
+import type { AssembledDocument } from "@/types";
 
 const { renderPdfMock } = vi.hoisted(() => ({
-	renderPdfMock: vi.fn(),
+	renderPdfMock: vi.fn<
+		[AssembledDocument, ...unknown[]],
+		Promise<string[]>
+	>(),
 }));
 
 vi.mock("@/formats/pdf", () => ({
