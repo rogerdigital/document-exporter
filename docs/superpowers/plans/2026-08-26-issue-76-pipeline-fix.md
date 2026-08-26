@@ -22,15 +22,15 @@
 
 **Files:**
 - Verify: `package.json`
-- Verify: `pnpm-lock.yaml`
+- Verify: `package-lock.json`
 
 - [ ] **Step 1: Install the locked dependencies in the worktree**
 
 ```bash
-pnpm install --frozen-lockfile
+npm ci
 ```
 
-Expected: pnpm links the existing locked dependency graph without changing `pnpm-lock.yaml`.
+Expected: npm installs the locked dependency graph without changing `package-lock.json`.
 
 - [ ] **Step 2: Run the complete baseline suite**
 
@@ -304,6 +304,15 @@ Use this settings argument in each case:
 
 ```ts
 { ...defaultSettings(), copyAttachments: true }
+```
+
+Because production `ExportPlan` objects start with an empty `attachmentCopies` array, these tests use the array only as fixture data. Mock the collector in each case so it returns that fixture through the real copy-enabled path:
+
+```ts
+vi.spyOn(AttachmentCollector.prototype, "collect").mockResolvedValue({
+	attachments: plan.attachmentCopies,
+	warnings: [],
+});
 ```
 
 - [ ] **Step 4: Run the full ExportRunner test file**
