@@ -1,5 +1,9 @@
 export function readStoredZipEntry(data: Uint8Array, targetName: string): string {
 	const decoder = new TextDecoder();
+	return decoder.decode(readStoredZipEntryBytes(data, targetName));
+}
+
+export function readStoredZipEntryBytes(data: Uint8Array, targetName: string): Uint8Array {
 	let offset = 0;
 
 	while (offset + 30 <= data.byteLength) {
@@ -24,12 +28,12 @@ export function readStoredZipEntry(data: Uint8Array, targetName: string): string
 			throw new Error(`Invalid ZIP entry bounds for ${targetName}`);
 		}
 
-		const name = decoder.decode(data.slice(nameStart, nameEnd));
+		const name = new TextDecoder().decode(data.slice(nameStart, nameEnd));
 		if (name === targetName) {
 			if (compressionMethod !== 0) {
 				throw new Error(`Expected stored ZIP entry for ${targetName}`);
 			}
-			return decoder.decode(data.slice(contentStart, contentEnd));
+			return data.slice(contentStart, contentEnd);
 		}
 
 		offset = contentEnd;

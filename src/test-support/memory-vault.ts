@@ -16,6 +16,7 @@ export interface MemoryVaultFixture {
 	bytes(path: string): Uint8Array;
 	paths(): string[];
 	remove(path: string): void;
+	isFile(path: string): boolean;
 }
 
 interface FolderNode extends TFolder {
@@ -185,11 +186,15 @@ export function createMemoryVault(): MemoryVaultFixture {
 			return parseCache(content);
 		},
 		getFirstLinkpathDest: (linkpath: string, sourcePath: string): TFile | null => {
-			const target = normalizePath(linkpath.split("#")[0].split("|")[0]);
+			const target = linkpath.split("#")[0].split("|")[0];
 			if (!target) return null;
+			// Join with the source folder before normalizing so ../ targets keep
+			// their upward reference, matching Obsidian's resolution order.
 			const separator = sourcePath.lastIndexOf("/");
 			const dir = separator === -1 ? "" : sourcePath.slice(0, separator);
-			const candidates = dir ? [`${dir}/${target}`, target] : [target];
+			const candidates = dir
+				? [normalizePath(`${dir}/${target}`), normalizePath(target)]
+				: [normalizePath(target)];
 			for (const candidate of candidates) {
 				const withExtension = candidate.toLowerCase().endsWith(".md")
 					? candidate
@@ -216,6 +221,10 @@ export function createMemoryVault(): MemoryVaultFixture {
 			return new Uint8Array(cloneBuffer(content));
 		},
 		paths: () => [...nodes.keys()].sort(),
+		isFile: (path) => {
+			const node = nodes.get(normalizePath(path));
+			return node !== undefined && "extension" in node;
+		},
 		remove: (path) => {
 			const normalized = normalizePath(path);
 			const node = nodes.get(normalized);
