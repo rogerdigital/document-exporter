@@ -52,7 +52,7 @@ export class ExportRunner {
 		settings: ExportSettings,
 		callbacks?: ExportProgressCallbacks,
 	): Promise<ExportResult> {
-		const writer = new OutputWriter(this.app);
+		const writer = new OutputWriter(this.app, settings.overwriteExisting);
 		const allWarnings: string[] = [];
 		this.cancelled = false;
 
@@ -260,16 +260,23 @@ export class ExportRunner {
 			callbacks?.onFileComplete(i, files.length);
 		}
 
-		// Write export report
+		// Write export report. Reports never overwrite anything, including
+		// prior reports, even when the main export allows overwrite.
 		if (allWarnings.length > 0) {
 			const report = allWarnings
 				.map((w, i) => `${i + 1}. ${w}`)
 				.join("\n");
 
-			await writer.writeText(
-				`${assetsRoot}/export-report.md`,
-				`# Export Warnings\n\n${report}\n`,
-			);
+			const reportWriter = new OutputWriter(this.app, false);
+			try {
+				await reportWriter.writeText(
+					this.reportPath(assetsRoot, effectivePlan, reportWriter),
+					`# Export Warnings\n\n${report}\n`,
+				);
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				allWarnings.push(`Could not write export report: ${msg}`);
+			}
 		}
 
 		return {
@@ -317,11 +324,12 @@ export class ExportRunner {
 		if (settings.overwriteExisting) return plan;
 
 		if (plan.source.type === "current-file") {
-			const targetPath = plan.outputFiles[0];
-			if (!targetPath || !writer.pathExists(targetPath)) return plan;
+			// Reuse the single-file output root only if nothing occupies it;
+			// an existing file or directory — even an empty one — relocates the
+			// whole export so previous outputs keep their attachments.
+			if (!writer.pathExists(plan.outputRoot)) return plan;
 			const candidateRoot = this.nextAvailablePath(
-				writer.timestampedFolder(plan.outputRoot),
-				writer,
+				writer.timestampedFolder(plan.outputRoot), writer,
 			);
 			return relocatePlan(plan, candidateRoot);
 		}
@@ -350,5 +358,26 @@ export class ExportRunner {
 			available = `${candidate}-${sequence}`;
 		}
 		return available;
+	}
+
+	// Pick a report path that cannot collide with any planned primary output
+	// or an existing file/directory. Case-insensitive reservation is
+	// deliberately conservative for case-insensitive filesystems.
+	private reportPath(root: string, plan: ExportPlan, writer: OutputWriter): string {
+		const reserved = new Set(plan.outputFiles.map((path) => path.toLowerCase()));
+		let sequence = 1;
+		let candidate = `${root}/export-report.md`;
+		const conflicts = (path: string) => {
+			const key = path.toLowerCase();
+			return writer.pathExists(path) || [...reserved].some(
+				(other) => other === key || other.startsWith(`${key}/`)
+					|| key.startsWith(`${other}/`),
+			);
+		};
+		while (conflicts(candidate)) {
+			sequence++;
+			candidate = `${root}/export-report-${sequence}.md`;
+		}
+		return candidate;
 	}
 }

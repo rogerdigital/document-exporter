@@ -29,6 +29,8 @@ export default tseslint.config(
       // Tests hand-polyfill Obsidian DOM globals in jsdom; the rule's
       // activeWindow.createDiv() suggestion does not type-check there.
       "obsidianmd/prefer-create-el": "off",
+      // Tests run under vitest in Node and are never bundled for mobile.
+      "obsidianmd/no-nodejs-modules": "off",
     },
   },
   globalIgnores([
