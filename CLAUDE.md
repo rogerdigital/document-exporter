@@ -69,6 +69,8 @@ src/
 
 - CI has an automatic release workflow triggered by tags — do NOT manually run `gh release create` after pushing a tag, it will conflict
 - Release steps: bump version in `manifest.json` + `versions.json` → PR → merge → `git tag -a X.Y.Z` → `git push origin X.Y.Z` → CI creates the release with `main.js`, `manifest.json`, `styles.css`
+- Version consistency across `package.json`, `package-lock.json`, `manifest.json` and the `versions.json` → `minAppVersion` mapping is enforced by `npm run check:version`; its regression tests run via `node --test scripts/check-version.test.mjs` (CI and release workflow run both)
+- Release notes: when `docs/releases/<tag>/release-notes.md` exists, CI publishes it verbatim; otherwise GitHub generates notes. Write the reviewed file for planned releases
 
 ## Key References
 

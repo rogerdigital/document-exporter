@@ -26,13 +26,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test version validation
+        run: node --test scripts/check-version.test.mjs
+
       - name: Verify version metadata
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: npm run check:version
 
+      - name: Lint
+        run: npm run lint:obsidian-warnings
+
       - name: Build
         run: npm run build
+
+      - name: Test
+        run: npm test
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
@@ -47,7 +56,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" \
-            --title="$tag" \
-            --generate-notes \
-            main.js manifest.json styles.css
+          notes="docs/releases/$tag/release-notes.md"
+          if [ -f "$notes" ]; then
+            gh release create "$tag" --title="$tag" --notes-file "$notes" main.js manifest.json styles.css
+          else
+            gh release create "$tag" --title="$tag" --generate-notes main.js manifest.json styles.css
+          fi
