@@ -26,7 +26,11 @@ export async function renderHtmlDocument(
 	const { html: body, warnings: renderWarnings } = await renderSections(doc.sections, app, doc.title, doc.attachments);
 	warnings.push(...renderWarnings);
 
-	const customCss = app ? extractObsidianStyles() : null;
+	// Style extraction needs Obsidian's live DOM; the headless fallback path
+	// (no activeDocument global) renders with the default stylesheet instead.
+	const customCss = app && typeof activeDocument !== "undefined"
+		? extractObsidianStyles()
+		: null;
 	const html = buildHtmlDoc(doc.title, toc, body, customCss);
 
 	const resolvedOutput = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm)$/i, '')}.html`;

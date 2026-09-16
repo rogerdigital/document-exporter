@@ -6,7 +6,8 @@ import { ExportModal, ExportModalResult } from "@/ui/ExportModal";
 import { ExportSourceResolver } from "@/export/ExportSourceResolver";
 import { ExportPlanBuilder, validatePlan } from "@/export/ExportPlan";
 import { ExportRunner, ExportProgressCallbacks, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
-import { ProgressNotice, summarizeWarnings } from "@/ui/ProgressNotice";
+import { ProgressNotice } from "@/ui/ProgressNotice";
+import { exportResultMessage } from "@/ui/ExportResultMessage";
 
 type NotebookNavigatorMenus = {
 	registerFileMenu?: (callback: (context: NotebookNavigatorFileContext) => void) => () => void;
@@ -215,15 +216,7 @@ export default class DocumentExporterPlugin extends Plugin {
 			}
 
 			const exportResult = await runner.run(plan, this.settings, callbacks);
-
-			if (exportResult.success) {
-				const msg = exportResult.warnings.length > 0
-					? `Export complete with ${exportResult.warnings.length} warning(s): ${exportResult.outputRoot} — ${summarizeWarnings(exportResult.warnings)}`
-					: `Export complete: ${exportResult.outputRoot}`;
-				progress.finish(msg);
-			} else {
-				progress.finish(`Export failed: ${exportResult.warnings.join(", ")}`);
-			}
+			progress.finish(exportResultMessage(exportResult));
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			progress.finish(`Export error: ${message}`);

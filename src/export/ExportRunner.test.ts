@@ -41,29 +41,33 @@ function createMockApp(files: string[]) {
 	};
 }
 
-function createPathAwareMockApp(
-	files: string[],
-	existingFolders: string[] = [],
-	existingFiles: string[] = [],
-) {
-	const pathMap = new Map<string, unknown>();
-	for (const path of files) pathMap.set(path, createFile(path));
-	for (const path of existingFolders) pathMap.set(path, { path, children: [] });
-	for (const path of existingFiles) pathMap.set(path, createFile(path));
+	function createPathAwareMockApp(
+		files: string[],
+		existingFolders: string[] = [],
+		existingFiles: string[] = [],
+	) {
+		const pathMap = new Map<string, unknown>();
+		for (const path of files) pathMap.set(path, createFile(path));
+		for (const path of existingFolders) pathMap.set(path, { path, children: [] });
+		for (const path of existingFiles) pathMap.set(path, createFile(path));
 
-	return {
-		vault: {
-			getAbstractFileByPath: vi.fn((path: string) => pathMap.get(path) ?? null),
-			read: vi.fn((_file?: { path: string }) => Promise.resolve("content")),
-			getMarkdownFiles: vi.fn(() => []),
-			createFolder: vi.fn().mockResolvedValue(undefined),
-			create: vi.fn().mockResolvedValue(undefined),
-			modify: vi.fn().mockResolvedValue(undefined),
-			createBinary: vi.fn().mockResolvedValue(undefined),
-			modifyBinary: vi.fn().mockResolvedValue(undefined),
-			readBinary: vi.fn(() => Promise.resolve(new ArrayBuffer(0))),
-			adapter: {},
-		},
+		return {
+			vault: {
+				getAbstractFileByPath: vi.fn((path: string) => pathMap.get(path) ?? null),
+				read: vi.fn((_file?: { path: string }) => Promise.resolve("content")),
+				getMarkdownFiles: vi.fn(() => []),
+				// Folder creation registers the folder so later existence checks
+				// (report writing) see what the run actually created.
+				createFolder: vi.fn(async (path: string) => {
+					pathMap.set(path, { path, children: [] });
+				}),
+				create: vi.fn().mockResolvedValue(undefined),
+				modify: vi.fn().mockResolvedValue(undefined),
+				createBinary: vi.fn().mockResolvedValue(undefined),
+				modifyBinary: vi.fn().mockResolvedValue(undefined),
+				readBinary: vi.fn(() => Promise.resolve(new ArrayBuffer(0))),
+				adapter: {},
+			},
 		metadataCache: {
 			getFileCache: vi.fn(() => ({ frontmatter: {}, links: [], embeds: [] })),
 			getFirstLinkpathDest: vi.fn(
@@ -220,7 +224,9 @@ describe("ExportRunner", () => {
 			);
 
 			expect(copySpy).toHaveBeenCalledTimes(3);
-			expect(result.success).toBe(true);
+			expect(result.status).toBe("cancelled");
+			expect(result.success).toBe(false);
+			expect(result.completedFiles).toBe(1);
 			expect(result.warnings[0]).toContain("1 of 2 file(s) exported");
 		});
 
@@ -242,12 +248,13 @@ describe("ExportRunner", () => {
 			};
 
 			const result = await runner.run(plan, defaultSettings(), callbacks);
-			expect(result.success).toBe(true);
+			expect(result.status).toBe("cancelled");
+			expect(result.success).toBe(false);
 			expect(result.warnings[0]).toContain("cancelled");
 			expect(result.warnings[0]).toContain("file(s) exported");
 		});
 
-		it("returns failure when cancelled before any file completes", async () => {
+		it("returns cancelled when cancelled before any file completes", async () => {
 			const app = createMockApp(["a.md", "b.md"]);
 			const plan = makePlan(["a.md", "b.md"]);
 			const runner = new ExportRunner(app as never);
@@ -261,7 +268,9 @@ describe("ExportRunner", () => {
 			};
 
 			const result = await runner.run(plan, defaultSettings(), callbacks);
+			expect(result.status).toBe("cancelled");
 			expect(result.success).toBe(false);
+			expect(result.completedFiles).toBe(0);
 			expect(result.warnings[0]).toContain("cancelled");
 		});
 	});
@@ -278,8 +287,10 @@ describe("ExportRunner", () => {
 				onPhase: vi.fn(),
 			});
 
+			expect(result.status).toBe("failed");
 			expect(result.success).toBe(false);
-			expect(result.warnings[0]).toContain("PDF generation failed");
+			expect(result.errors[0]).toContain("PDF generation failed");
+			expect(result.incompletePaths.length).toBeGreaterThan(0);
 		});
 
 		it("rejects PDF on mobile before creating output artifacts", async () => {
@@ -290,8 +301,10 @@ describe("ExportRunner", () => {
 
 			const result = await runner.run(makePdfPlan(["a.md"]), defaultSettings());
 
+			expect(result.status).toBe("failed");
 			expect(result.success).toBe(false);
-			expect(result.warnings).toEqual(["PDF export requires the desktop app."]);
+			expect(result.warnings).toEqual([]);
+			expect(result.errors).toEqual(["PDF export requires the desktop app."]);
 			expect(app.vault.createFolder).not.toHaveBeenCalled();
 			expect(app.vault.create).not.toHaveBeenCalled();
 			expect(app.vault.createBinary).not.toHaveBeenCalled();
@@ -397,7 +410,8 @@ describe("ExportRunner", () => {
 			const noConflictApp = createPathAwareMockApp(["notes/a.md"], ["exports"]);
 			const noConflictResult = await new ExportRunner(noConflictApp as never)
 				.run(plan, defaultSettings());
-			expect(noConflictResult.outputRoot).toBe("exports");
+			expect(noConflictResult.outputRoot).toBe("exports/notes");
+			expect(noConflictResult.completedPaths).toEqual(["exports/notes/a.md"]);
 			expect(writeSpy).toHaveBeenCalledWith(
 				"exports/notes/a.md",
 				expect.any(String),

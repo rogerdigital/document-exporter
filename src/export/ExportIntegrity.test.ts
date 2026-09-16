@@ -182,8 +182,10 @@ describe("export integrity", () => {
 			},
 		);
 
+		expect(result.status).toBe("failed");
 		expect(result.success).toBe(false);
-		expect(result.warnings[0]).toContain("Output already exists: exports/A.md");
+		expect(result.errors[0]).toContain("Export failed for a/A.md: Output already exists: exports/A.md");
+		expect(result.incompletePaths).toContain("exports/A.md");
 		expect(fixture.text("exports/A.md")).toBe("PRE-EXISTING");
 	});
 
@@ -206,7 +208,7 @@ describe("export integrity", () => {
 		expect(Array.from(fixture.bytes("exports/assets/img.png"))).toEqual([9]);
 	});
 
-	it("surfaces a missing attachment as a failed copy warning", async () => {
+	it("records a missing attachment as a failed copy error with an incomplete primary", async () => {
 		const fixture = createMemoryVault();
 		fixture.putText("a/A.md", "![[a/img.png]]");
 		fixture.putBinary("a/img.png", new Uint8Array([1]));
@@ -225,8 +227,11 @@ describe("export integrity", () => {
 			},
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.warnings).toContain("Failed to copy attachment: a/img.png");
+		expect(result.status).toBe("failed");
+		expect(result.success).toBe(false);
+		expect(result.completedFiles).toBe(0);
+		expect(result.incompletePaths).toContain("exports/A.md");
+		expect(result.errors).toContain("Failed to copy attachment: a/img.png");
 		expect(fixture.text("exports/export-report.md")).toContain("Failed to copy attachment");
 	});
 });
