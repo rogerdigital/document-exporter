@@ -213,7 +213,7 @@ describe("export outcomes", () => {
 		fixture.putText("a/A.md", "Link to [[missing]]");
 		const vault = fixture.app.vault;
 		const create = vault.create.bind(vault) as unknown as
-			(path: string, content: string) => Promise<unknown>;
+			(path: string, content: string) => Promise<import("obsidian").TFile>;
 		vault.create = async (path: string, content: string) => {
 			if (path.endsWith("export-report.md")) {
 				throw new Error("simulated report failure");
