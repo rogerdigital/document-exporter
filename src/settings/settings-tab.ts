@@ -45,7 +45,7 @@ const SETTING_META = {
 	},
 	overwriteExisting: {
 		name: "Overwrite existing exports",
-		desc: "Overwrite if the output folder already exists. Otherwise a timestamped folder is created.",
+		desc: "Replace existing export files when enabled. When disabled and the destination already exists, the export uses a new timestamped folder for its documents, attachments and report.",
 		aliases: ["replace", "timestamped folder"],
 	},
 } as const;

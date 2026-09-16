@@ -11,8 +11,8 @@ Export single notes, entire folders, or hand-picked files into PDF, Word, EPUB, 
 - **PDF** — generates a print-ready `.pdf` with native Obsidian rendering
 - **Word document** — generates a `.docx` document for editing and sharing
 - **EPUB e-book** — generates a self-contained `.epub` with embedded images and a navigable table of contents (desktop and mobile)
-- **Markdown bundle** — creates one `.md` file per source note plus a shared `assets/` directory, with attachments copied and links rewritten
-- **HTML document** — generates a standalone `.html` with table of contents, native rendering, and linked assets
+- **Markdown bundle** — batch export creates one `.md` file per source note plus a shared `assets/` directory, with attachments copied and links rewritten
+- **HTML document** — batch export creates one standalone `.html` per source note, with table of contents, native rendering, and linked assets
 - **Progress bar with cancel** — visual progress indicator for every export, with a cancel button that preserves already-exported files
 
 ## Usage
@@ -69,7 +69,21 @@ Open **Settings → Document Exporter**. All settings are indexed and searchable
 | Expand note embeds | Inline `![[Note]]` embeds into exported documents | On |
 | Include source path comments | Add HTML comments showing each section's origin | Off |
 | Copy attachments | Copy referenced images and files into the export | On |
-| Overwrite existing exports | Overwrite if output already exists; otherwise a timestamped folder is created | Off |
+| Overwrite existing exports | Replace existing export files when enabled. When disabled and the destination already exists, the export uses a new timestamped folder for its documents, attachments and report. "Destination" means the selected root for a single note and the batch leaf for folder/selected-file exports — including an existing empty destination. No source folder or previous export is moved or changed; only the new export's destination changes. | Off |
+
+## Format capabilities
+
+Native rendering (Obsidian's own engine) is used for desktop PDF and in-app HTML; DOCX and EPUB use format-specific basic conversion. Exact visual parity with Obsidian is not promised.
+
+| Format | Rendering path | Local images | Non-image attachments | Links | Platforms | Documented limitations |
+|--------|----------------|--------------|----------------------|-------|-----------|------------------------|
+| PDF | Obsidian native print | Copied to `assets/` | Copied to `assets/` | Rewritten relative | Desktop only | Requires the desktop app |
+| Word (.docx) | Format-specific converter | Embedded in the document | Copied to `assets/` | Internal headings, external URLs | Desktop, mobile | Basic conversion; no exact visual parity |
+| EPUB | Format-specific converter | Packaged inside the `.epub` | Not packaged | Cross-note links omitted | Desktop, mobile | Images only |
+| Markdown bundle | Markdown passthrough | Copied to `assets/` | Copied to `assets/` | Rewritten relative | Desktop, mobile | — |
+| HTML | Native in-app renderer (basic converter as fallback) | Copied to `assets/` | Copied to `assets/` | Rewritten relative | Desktop, mobile | — |
+
+Artifact verification status: the automated headless contract suite covers Markdown, HTML (fallback path), DOCX and EPUB output — link destinations, attachment bytes, package XML and relationships. Interactive verification of exports produced through the app's own dialogs on each platform is tracked in the 1.0.0 release readiness record.
 
 ## Limitations
 
