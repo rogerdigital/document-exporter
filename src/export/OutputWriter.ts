@@ -7,9 +7,11 @@ const nodeFs = g && "require" in g
 
 export class OutputWriter {
 	private app: App;
+	private readonly overwriteExisting: boolean;
 
-	constructor(app: App) {
+	constructor(app: App, overwriteExisting = true) {
 		this.app = app;
+		this.overwriteExisting = overwriteExisting;
 	}
 
 	static supportsExternalPaths(): boolean {
@@ -37,51 +39,55 @@ export class OutputWriter {
 	async writeText(filePath: string, content: string): Promise<void> {
 		if (this.isExternal(filePath)) {
 			const fs = this.getExternalFs();
-			fs.writeFileSync(filePath, content, "utf-8");
+			fs.writeFileSync(filePath, content, {
+				encoding: "utf-8",
+				flag: this.overwriteExisting ? "w" : "wx",
+			});
 			return;
 		}
 
 		const existing = this.app.vault.getAbstractFileByPath(filePath);
-		if (existing instanceof TFile) {
+		if (existing) {
+			if (!this.overwriteExisting || !(existing instanceof TFile)) {
+				throw new Error(`Output already exists: ${filePath}`);
+			}
 			await this.app.vault.modify(existing, content);
-		} else {
-			await this.app.vault.create(filePath, content);
+			return;
 		}
+		await this.app.vault.create(filePath, content);
 	}
 
 	async writeBinary(filePath: string, data: ArrayBuffer | Uint8Array): Promise<void> {
 		if (this.isExternal(filePath)) {
 			const fs = this.getExternalFs();
-			fs.writeFileSync(filePath, data instanceof Uint8Array ? data : new Uint8Array(data));
+			fs.writeFileSync(
+				filePath,
+				data instanceof Uint8Array ? data : new Uint8Array(data),
+				{ flag: this.overwriteExisting ? "w" : "wx" },
+			);
 			return;
 		}
 
 		const buffer = data instanceof ArrayBuffer ? data : uint8ArrayToArrayBuffer(data);
 		const existing = this.app.vault.getAbstractFileByPath(filePath);
-		if (existing instanceof TFile) {
+		if (existing) {
+			if (!this.overwriteExisting || !(existing instanceof TFile)) {
+				throw new Error(`Output already exists: ${filePath}`);
+			}
 			await this.app.vault.modifyBinary(existing, buffer);
-		} else {
-			await this.app.vault.createBinary(filePath, buffer);
+			return;
 		}
+		await this.app.vault.createBinary(filePath, buffer);
 	}
 
 	async copyBinaryFile(sourcePath: string, destPath: string): Promise<void> {
 		const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
-		if (!(sourceFile instanceof TFile)) return;
+		if (!(sourceFile instanceof TFile)) {
+			throw new Error(`Attachment source not found: ${sourcePath}`);
+		}
 
 		const content = await this.app.vault.readBinary(sourceFile);
-
-		if (this.isExternal(destPath)) {
-			const fs = this.getExternalFs();
-			fs.writeFileSync(destPath, new Uint8Array(content));
-		} else {
-			const existing = this.app.vault.getAbstractFileByPath(destPath);
-			if (existing instanceof TFile) {
-				await this.app.vault.modifyBinary(existing, content);
-			} else {
-				await this.app.vault.createBinary(destPath, content);
-			}
-		}
+		await this.writeBinary(destPath, content);
 	}
 
 	folderExists(folderPath: string): boolean {

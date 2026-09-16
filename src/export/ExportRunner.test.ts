@@ -339,22 +339,27 @@ describe("ExportRunner", () => {
 	});
 
 	describe("output collisions", () => {
-		it("keeps the original root when the directory exists but the target file does not", async () => {
+		it("relocates when the single-file output root exists even if the target file does not", async () => {
 			const app = createPathAwareMockApp(["note.md"], ["exports"]);
 			const runner = new ExportRunner(app as never);
+			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
 			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")
 				.mockResolvedValue(undefined);
 
 			const result = await runner.run(makePlan(["note.md"]), defaultSettings());
 
-			expect(result.outputRoot).toBe("exports");
+			expect(result.outputRoot).toBe("exports-2026-07-29");
 			expect(writeSpy).toHaveBeenCalledWith(
+				"exports-2026-07-29/note.md",
+				expect.any(String),
+			);
+			expect(writeSpy).not.toHaveBeenCalledWith(
 				"exports/note.md",
 				expect.any(String),
 			);
 		});
 
-		it("relocates the output file when the target already exists", async () => {
+		it("relocates when only the target file exists", async () => {
 			const app = createPathAwareMockApp(
 				["note.md"],
 				["exports"],
@@ -462,7 +467,7 @@ describe("ExportRunner", () => {
 				outputFiles: ["/tmp/exports/note.md"],
 			};
 			vi.spyOn(OutputWriter.prototype, "pathExists")
-				.mockImplementation((path) => path === "/tmp/exports/note.md");
+				.mockImplementation((path) => path === "/tmp/exports");
 			vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("2026-07-29");
 			vi.spyOn(OutputWriter.prototype, "ensureFolder").mockResolvedValue(undefined);
 			const writeSpy = vi.spyOn(OutputWriter.prototype, "writeText")

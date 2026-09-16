@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { TFile } from "obsidian";
 import { OutputWriter } from "@/export/OutputWriter";
 
@@ -91,6 +91,118 @@ describe("OutputWriter", () => {
 			await writer.writeText("output/doc.md", "# Hello");
 			expect(app.vault.create).toHaveBeenCalledWith("output/doc.md", "# Hello");
 		});
+
+		it("modifies an existing vault file when overwrite is enabled", async () => {
+			const app = createMockApp({ "output/doc.md": { extension: "md" } });
+			const writer = new OutputWriter(app as never);
+			await writer.writeText("output/doc.md", "# Updated");
+			expect(app.vault.modify).toHaveBeenCalledWith(
+				expect.objectContaining({ path: "output/doc.md" }),
+				"# Updated",
+			);
+			expect(app.vault.create).not.toHaveBeenCalled();
+		});
+
+		it("refuses to modify an existing vault file when overwrite is disabled", async () => {
+			const app = createMockApp({ "output/doc.md": { extension: "md" } });
+			const writer = new OutputWriter(app as never, false);
+			await expect(writer.writeText("output/doc.md", "# Updated"))
+				.rejects.toThrow("Output already exists: output/doc.md");
+			expect(app.vault.modify).not.toHaveBeenCalled();
+			expect(app.vault.create).not.toHaveBeenCalled();
+		});
+
+		it("refuses to write when a folder occupies the destination", async () => {
+			const app = createMockApp();
+			app.vault.getAbstractFileByPath = vi.fn(() => ({ path: "output", children: [] })) as never;
+			const writer = new OutputWriter(app as never, false);
+			await expect(writer.writeText("output/doc.md", "# Hello"))
+				.rejects.toThrow("Output already exists: output/doc.md");
+			expect(app.vault.create).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("writeBinary overwrite policy", () => {
+		it("modifies an existing vault file when overwrite is enabled", async () => {
+			const app = createMockApp({ "output/img.png": { extension: "png" } });
+			const writer = new OutputWriter(app as never);
+			await writer.writeBinary("output/img.png", new Uint8Array([1]));
+			expect(app.vault.modifyBinary).toHaveBeenCalled();
+			expect(app.vault.createBinary).not.toHaveBeenCalled();
+		});
+
+		it("refuses to modify an existing vault file when overwrite is disabled", async () => {
+			const app = createMockApp({ "output/img.png": { extension: "png" } });
+			const writer = new OutputWriter(app as never, false);
+			await expect(writer.writeBinary("output/img.png", new Uint8Array([1])))
+				.rejects.toThrow("Output already exists: output/img.png");
+			expect(app.vault.modifyBinary).not.toHaveBeenCalled();
+			expect(app.vault.createBinary).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("external write policy", () => {
+		// OutputWriter resolves window.require at module initialization, so each
+		// external test reloads the module with a stubbed window. Node builtins
+		// are imported dynamically to satisfy the obsidianmd lint rules.
+		async function freshWriter(overwrite: boolean, app = createMockApp()) {
+			const { createRequire } = await import("node:module");
+			vi.resetModules();
+			vi.stubGlobal("window", { require: createRequire(import.meta.url) });
+			const { OutputWriter: Fresh } = await import("@/export/OutputWriter");
+			return new Fresh(app as never, overwrite);
+		}
+
+		async function tempDir(): Promise<{ dir: string; fs: typeof import("node:fs") }> {
+			const [fs, os, path] = await Promise.all([
+				import("node:fs"), import("node:os"), import("node:path"),
+			]);
+			return { dir: fs.mkdtempSync(path.join(os.tmpdir(), "writer-ext-")), fs };
+		}
+
+		afterEach(() => {
+			vi.unstubAllGlobals();
+			vi.resetModules();
+		});
+
+		it("refuses to modify an existing external file when overwrite is disabled", async () => {
+			const { dir, fs } = await tempDir();
+			try {
+				const target = `${dir}/note.md`;
+				fs.writeFileSync(target, "original");
+				const writer = await freshWriter(false);
+				await expect(writer.writeText(target, "replacement")).rejects.toThrow();
+				expect(fs.readFileSync(target, "utf-8")).toBe("original");
+			} finally {
+				fs.rmSync(dir, { recursive: true, force: true });
+			}
+		});
+
+		it("refuses to modify an existing external binary when overwrite is disabled", async () => {
+			const { dir, fs } = await tempDir();
+			try {
+				const target = `${dir}/img.png`;
+				fs.writeFileSync(target, new Uint8Array([1]));
+				const writer = await freshWriter(false);
+				await expect(writer.writeBinary(target, new Uint8Array([2]))).rejects.toThrow();
+				expect(Array.from(fs.readFileSync(target))).toEqual([1]);
+			} finally {
+				fs.rmSync(dir, { recursive: true, force: true });
+			}
+		});
+
+		it("overwrites external files when overwrite is enabled", async () => {
+			const { dir, fs } = await tempDir();
+			try {
+				const target = `${dir}/note.md`;
+				fs.writeFileSync(target, "original");
+				const writer = await freshWriter(true);
+				await writer.writeText(target, "replacement");
+				expect(fs.readFileSync(target, "utf-8")).toBe("replacement");
+			} finally {
+				fs.rmSync(dir, { recursive: true, force: true });
+			}
+		});
 	});
 
 	describe("writeBinary", () => {
@@ -115,10 +227,11 @@ describe("OutputWriter", () => {
 			expect(app.vault.createBinary).toHaveBeenCalledWith("output/img.png", buf);
 		});
 
-		it("skips when source file not found", async () => {
+		it("throws when the source attachment is not found", async () => {
 			const app = createMockApp();
 			const writer = new OutputWriter(app as never);
-			await writer.copyBinaryFile("missing.png", "output/missing.png");
+			await expect(writer.copyBinaryFile("missing.png", "output/missing.png"))
+				.rejects.toThrow("Attachment source not found: missing.png");
 			expect(app.vault.readBinary).not.toHaveBeenCalled();
 			expect(app.vault.createBinary).not.toHaveBeenCalled();
 		});
