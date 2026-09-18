@@ -83,8 +83,6 @@ Native rendering (Obsidian's own engine) is used for desktop PDF and in-app HTML
 | Markdown bundle | Markdown passthrough | Copied to `assets/` | Copied to `assets/` | Rewritten relative | Desktop, mobile | — |
 | HTML | Native in-app renderer (basic converter as fallback) | Copied to `assets/` | Copied to `assets/` | Rewritten relative | Desktop, mobile | — |
 
-Artifact verification status: the automated headless contract suite covers Markdown, HTML (fallback path), DOCX and EPUB output — link destinations, attachment bytes, package XML and relationships. Interactive verification of exports produced through the app's own dialogs on each platform is tracked in the 1.0.0 release readiness record.
-
 ## Limitations
 
 - Block-reference embeds (`![[Note#^block]]`) are not expanded
@@ -95,7 +93,7 @@ Artifact verification status: the automated headless contract suite covers Markd
 
 ## Privacy
 
-Document Exporter does not make any network requests. All processing happens locally. No data is sent to external services.
+All processing happens locally. The only network activity is fetching remote resources referenced by the note itself during export rendering (for example `http(s)` images); exported documents keep those references, so a browser or reader opening them may load the same resources. No telemetry is collected and no document content is sent to any external service.
 
 ## Installation
 
