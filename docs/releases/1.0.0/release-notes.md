@@ -18,6 +18,11 @@ This release makes exports non-destructive by default.
 
 When overwrite is off and the destination exists, the new export lands in a sibling timestamped folder (for example `exports/2026-09-17T10-30-00/`). This applies to single-note exports (destination = the selected output root) and batch exports (destination = the batch leaf folder).
 
+## Fixes for task lists and nested batch exports
+
+- Notes containing task lists (`- [ ]` / `- [x]`) now export as valid EPUB and HTML: task items are grouped into a proper list. Previously such notes produced an EPUB that failed strict readers.
+- Batch HTML exports now reference copied images relative to each document's own folder, so images load correctly from documents in nested folders, not just from the batch root.
+
 ## Formats and platforms
 
 PDF, Word (.docx), EPUB, Markdown bundles, and HTML on desktop and mobile Obsidian. PDF requires the desktop app. See the README's format capability table for rendering paths, attachment handling, and per-format limitations.
