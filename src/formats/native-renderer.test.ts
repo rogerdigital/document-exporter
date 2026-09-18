@@ -78,4 +78,31 @@ describe("native renderer asset URLs", () => {
 
 		expect(rewriteAppProtocolUrls(html, attachments)).toBe(html);
 	});
+
+	it("resolves attachment paths relative to the rendered file in batch exports", () => {
+		// Regression (native A02): nested batch documents must reference the
+		// shared assets root from their own directory, not from the batch root.
+		const html = '<img src="app://local/vault/images/landscape.png">';
+		const attachments = [{
+			sourcePath: "images/landscape.png",
+			outputRelativePath: "assets/landscape.png",
+		}];
+
+		expect(rewriteAppProtocolUrls(html, attachments, {
+			fromFile: "exports/folder/nested/part.html",
+			assetsRoot: "exports/folder",
+		})).toBe('<img src="../assets/landscape.png">');
+
+		// A document at the assets root itself keeps the plain shared path.
+		expect(rewriteAppProtocolUrls(html, attachments, {
+			fromFile: "exports/folder/index.html",
+			assetsRoot: "exports/folder",
+		})).toBe('<img src="assets/landscape.png">');
+
+		// Deeper nesting adds one more parent hop.
+		expect(rewriteAppProtocolUrls(html, attachments, {
+			fromFile: "exports/folder/a/b/part.html",
+			assetsRoot: "exports/folder",
+		})).toBe('<img src="../../assets/landscape.png">');
+	});
 });

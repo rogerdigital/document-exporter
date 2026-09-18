@@ -94,6 +94,7 @@ function buildFixtureVault() {
 	fixture.putBinary("collision/a/img.png", png(160, 100, RED));
 	fixture.putBinary("collision/b/img.png", png(160, 100, BLUE));
 	fixture.putText("export-report.md", "# Preserve this document\n\nREPORT-DOCUMENT-SENTINEL\n\n[[MissingReportTarget]]\n");
+	fixture.putText("tasks.md", "# Tasks\n\n- [ ] Task item\n- [x] Done item\n\nTASK-LIST-SENTINEL\n");
 	return fixture;
 }
 
@@ -334,6 +335,42 @@ describe("release artifacts (headless)", () => {
 		expect(chapter).not.toContain("app://");
 		expect(readStoredZipEntry(zip, "OEBPS/content.opf")).not.toContain("app://");
 		persistCase("content-epub", fixture, result, "headless:epub");
+	});
+
+	it("wraps task lists in a ul so EPUB chapters and fallback HTML stay structurally valid", async () => {
+		// Regression (native A11): a bare <li> in an EPUB chapter body fails
+		// EPUBCheck RSC-005 (element "li" not allowed in body). XML
+		// well-formedness alone does not catch this — assert the content model.
+		const epubFixture = buildFixtureVault();
+		const epubResult = await runExport(
+			epubFixture, { type: "current-file", path: "tasks.md" }, "epub", "tasks",
+		);
+
+		expect(epubResult.status).toBe("completed");
+		const chapter = readStoredZipEntry(epubFixture.bytes("exports/tasks.epub"), "OEBPS/chapter-1.xhtml");
+		expect(chapter).toContain("TASK-LIST-SENTINEL");
+		expect(chapter).toContain("☐ Task item");
+		expect(chapter).toContain("☑ Done item");
+		const epubDoc = parseXml(chapter);
+		const strayListItems = elementsNamed(epubDoc, "li").filter((li) => {
+			const parent = li.parentElement?.localName ?? "";
+			return parent !== "ul" && parent !== "ol";
+		});
+		expect(strayListItems).toEqual([]);
+		expect(elementsNamed(epubDoc, "ul").length).toBeGreaterThan(0);
+
+		const htmlFixture = buildFixtureVault();
+		const htmlResult = await runExport(
+			htmlFixture, { type: "current-file", path: "tasks.md" }, "html-document", "tasks",
+		);
+		expect(htmlResult.status).toBe("completed");
+		const htmlDoc = new JSDOM(htmlFixture.text("exports/tasks.html")).window.document;
+		const items = htmlDoc.querySelectorAll("ul.task-list li");
+		expect(items.length).toBe(2);
+		expect(items[0].className).toBe("task");
+		expect(items[0].querySelector("input[type=checkbox]:not([checked])")).not.toBeNull();
+		expect(items[1].className).toBe("task-done");
+		expect(items[1].querySelector("input[type=checkbox][checked]")).not.toBeNull();
 	});
 
 	describe("folder batch", () => {

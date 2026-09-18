@@ -22,8 +22,16 @@ export async function renderHtmlDocument(
 	// target folder, consistent across all formats).
 	await writer.ensureFolder(plan.outputRoot);
 
+	const resolvedOutput = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm)$/i, "")}.html`;
+	// Attachment paths in rendered HTML must resolve from the document's own
+	// directory; batch primaries sit at nested depths under assetsRoot.
+	const assetsRoot = plan.outputFolderName
+		? `${plan.outputRoot}/${plan.outputFolderName}`
+		: plan.outputRoot;
+	const refContext = { fromFile: resolvedOutput, assetsRoot };
+
 	const toc = doc.sections.length > 1 ? generateToc(doc.sections) : "";
-	const { html: body, warnings: renderWarnings } = await renderSections(doc.sections, app, doc.title, doc.attachments);
+	const { html: body, warnings: renderWarnings } = await renderSections(doc.sections, app, doc.title, doc.attachments, refContext);
 	warnings.push(...renderWarnings);
 
 	// Style extraction needs Obsidian's live DOM; the headless fallback path
@@ -33,7 +41,6 @@ export async function renderHtmlDocument(
 		: null;
 	const html = buildHtmlDoc(doc.title, toc, body, customCss);
 
-	const resolvedOutput = outputFilePath ?? `${plan.outputRoot}/${plan.outputFilename.replace(/\.(md|html|htm)$/i, '')}.html`;
 	await writer.ensureFolder(resolvedOutput.substring(0, resolvedOutput.lastIndexOf("/")));
 	await writer.writeText(resolvedOutput, html);
 
@@ -53,6 +60,7 @@ async function renderSections(
 	app: App | null,
 	docTitle: string,
 	attachments: AssembledDocument["attachments"],
+	refContext?: { fromFile: string; assetsRoot: string },
 ): Promise<{ html: string; warnings: string[] }> {
 	const allWarnings: string[] = [];
 	const parts: string[] = [];
@@ -75,7 +83,7 @@ async function renderSections(
 					renderableMarkdown,
 					s.sourcePath,
 				);
-				sectionHtml = rewriteAppProtocolUrls(result.html, attachments);
+				sectionHtml = rewriteAppProtocolUrls(result.html, attachments, refContext);
 				allWarnings.push(...result.warnings);
 			} catch {
 				sectionHtml = markdownToBasicHtml(s.markdown);
@@ -134,9 +142,19 @@ export function markdownToBasicHtml(md: string): string {
 		return `<blockquote>${content}</blockquote>`;
 	});
 
-	// 7. Task lists
-	html = html.replace(/^- \[x\] (.+)$/gm, '<li class="task-done"><input type="checkbox" checked disabled> $1</li>');
-	html = html.replace(/^- \[ \] (.+)$/gm, '<li class="task"><input type="checkbox" disabled> $1</li>');
+	// 7. Task lists — consecutive task lines form one <ul>; a bare <li> is
+	// invalid XHTML in EPUB chapters (element not allowed in body) and
+	// malformed in standalone HTML.
+	html = html.replace(/^(?:- \[[x ]\] .+(?:\n- \[[x ]\] .+)*)$/gm, (match) => {
+		const items = match.split("\n").map((line) => {
+			const done = line.startsWith("- [x] ");
+			const text = line.slice("- [ ] ".length);
+			return done
+				? `<li class="task-done"><input type="checkbox" checked disabled> ${text}</li>`
+				: `<li class="task"><input type="checkbox" disabled> ${text}</li>`;
+		}).join("");
+		return `<ul class="task-list">${items}</ul>`;
+	});
 
 	// 8. Unordered lists
 	html = html.replace(/^(?:[*-] .+(?:\n[*-] .+)*)/gm, (match) => {

@@ -102,9 +102,19 @@ function shouldIncludeRule(cssText: string): boolean {
 	return true;
 }
 
+/**
+ * Rewrite `app://` resource URLs to output attachment paths.
+ *
+ * Without `context` the returned path is the attachment's
+ * `outputRelativePath`, relative to the shared assets root — correct for
+ * single-file exports whose document sits at that root. Batch exports render
+ * documents at nested depths, so they pass `context` and the path is made
+ * relative to the rendered file's own location.
+ */
 export function rewriteAppProtocolUrls(
 	html: string,
 	attachments: AttachmentCopy[],
+	context?: { fromFile: string; assetsRoot: string },
 ): string {
 	return html.replace(/\b(src|href|data)="(app:\/\/[^"]+)"/g, (
 		match,
@@ -112,7 +122,9 @@ export function rewriteAppProtocolUrls(
 		rawUrl: string,
 	) => {
 		const outputPath = resolveAttachmentUrl(rawUrl, attachments);
-		return outputPath ? `${attribute}="${outputPath}"` : match;
+		if (!outputPath) return match;
+		if (!context) return `${attribute}="${outputPath}"`;
+		return `${attribute}="${relativePathBetween(context.fromFile, `${context.assetsRoot}/${outputPath}`)}"`;
 	});
 }
 
