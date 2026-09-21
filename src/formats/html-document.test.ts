@@ -93,6 +93,62 @@ describe("HTML Document rendering", () => {
 		});
 	});
 
+	describe("markdown escapes", () => {
+		it("renders an escaped asterisk as a literal character", () => {
+			const html = markdownToBasicHtml("a \\* b");
+
+			expect(html).toBe("<p>a * b</p>");
+		});
+
+		it("renders two escaped asterisks without italics or backslashes", () => {
+			const html = markdownToBasicHtml("a \\* b \\* c");
+
+			expect(html).toBe("<p>a * b * c</p>");
+			expect(html).not.toContain("<em>");
+		});
+
+		it("keeps escaped asterisks in table cells from pairing across cells", () => {
+			const html = markdownToBasicHtml("| h1 | h2 | h3 |\n|---|---|---|\n| a \\* | b | c \\* |");
+
+			expect(html).toContain("<td>a *</td>");
+			expect(html).toContain("<td>c *</td>");
+			expect(html).not.toContain("<em>");
+		});
+
+		it("keeps an escaped pipe inside a table cell", () => {
+			const html = markdownToBasicHtml("| a \\| b | c |\n|---|---|\n| 1 | 2 |");
+
+			expect(html).toContain("<th>a | b</th>");
+			expect(html).toContain("<th>c</th>");
+		});
+
+		it("does not turn escaped brackets into a link", () => {
+			const html = markdownToBasicHtml("\\[not a link\\](x)");
+
+			expect(html).toBe("<p>[not a link](x)</p>");
+			expect(html).not.toContain("<a ");
+		});
+
+		it("renders an escaped backslash as a single backslash", () => {
+			const html = markdownToBasicHtml("a \\\\ b");
+
+			expect(html).toBe("<p>a \\ b</p>");
+		});
+
+		it("escapes HTML in restored escaped characters", () => {
+			const html = markdownToBasicHtml("a \\< b");
+
+			expect(html).toBe("<p>a &lt; b</p>");
+			expect(html).not.toContain("a <");
+		});
+
+		it("keeps escaped characters untouched inside inline code", () => {
+			const html = markdownToBasicHtml("`a \\* b`");
+
+			expect(html).toBe("<p><code>a \\* b</code></p>");
+		});
+	});
+
 	describe("XSS prevention", () => {
 		it("escapes HTML in markdown body content", async () => {
 			const { html } = await renderTestHtml([
@@ -223,6 +279,13 @@ describe("HTML Document rendering", () => {
 
 			expect(html).toContain("checked");
 			expect(html).toContain("task-done");
+		});
+
+		it("does not italicize bare multiplication asterisks", () => {
+			const html = markdownToBasicHtml("3 * 4 * 5");
+
+			expect(html).toBe("<p>3 * 4 * 5</p>");
+			expect(html).not.toContain("<em>");
 		});
 	});
 });

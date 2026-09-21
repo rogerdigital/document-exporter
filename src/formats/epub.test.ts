@@ -147,6 +147,24 @@ describe("renderEpub", () => {
 		expect(readStoredZipEntry(data, "OEBPS/styles.css")).toContain("body");
 	});
 
+	it("produces balanced XHTML tags for escaped asterisks in tables", async () => {
+		const w = makeWriter();
+		await renderEpub(
+			makeDoc("| a \\* | b | c \\* |\n|---|---|---|\n| x \\* | y | z \\* |"),
+			PLAN,
+			w.writer as never,
+			null,
+		);
+
+		const chapter = readStoredZipEntry(w.written!, "OEBPS/chapter-1.xhtml");
+		expect(chapter).toContain("<td>x *</td>");
+		expect(chapter).toContain("<td>z *</td>");
+		const opens = (chapter.match(/<em>/g) ?? []).length;
+		const closes = (chapter.match(/<\/em>/g) ?? []).length;
+		expect(opens).toBe(closes);
+		expect(opens).toBe(0);
+	});
+
 	it("embeds images under generated names and rewrites references", async () => {
 		const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 		const app = {

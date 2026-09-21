@@ -2,6 +2,7 @@ import { App, TFile } from "obsidian";
 import { AssembledDocument, AttachmentCopy, ExportPlan } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
 import { createZip } from "@/formats/zip";
+import { MARKDOWN_ESCAPE_RE } from "@/formats/html-document";
 
 type DocxRun = {
 	text: string;
@@ -358,23 +359,35 @@ function buildTable(
 }
 
 function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] {
+	// Mask backslash escapes (`\*`, `\[`, …) before syntax matching so the
+	// escaped punctuation can never pair as emphasis or open a link; the
+	// literal characters are restored into the runs afterwards. Private-use
+	// sentinels cannot collide with real note text.
+	const escapes: string[] = [];
+	const marked = text.replace(MARKDOWN_ESCAPE_RE, (_match: string, ch: string) => {
+		escapes.push(ch);
+		return `\uE000${escapes.length - 1}\uE001`;
+	});
+	const unmark = (value: string): string =>
+		value.replace(/\uE000(\d+)\uE001/g, (match, idx: string) => escapes[parseInt(idx)] ?? match);
+
 	const runs: DocxRun[] = [];
 	const regex =
 		/(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\))|(!\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\))/g;
 	let lastIndex = 0;
 	let match: RegExpExecArray | null;
 
-	while ((match = regex.exec(text)) !== null) {
+	while ((match = regex.exec(marked)) !== null) {
 		if (match.index > lastIndex) {
-			runs.push(createTextRun(text.slice(lastIndex, match.index)));
+			runs.push(createTextRun(unmark(marked.slice(lastIndex, match.index))));
 		}
 
 		if (match[1]) {
-			runs.push(createTextRun(match[2], { bold: true }));
+			runs.push(createTextRun(unmark(match[2]), { bold: true }));
 		} else if (match[3]) {
-			runs.push(createTextRun(match[4], { italics: true }));
+			runs.push(createTextRun(unmark(match[4]), { italics: true }));
 		} else if (match[5]) {
-			runs.push(createTextRun(match[6], { code: true }));
+			runs.push(createTextRun(unmark(match[6]), { code: true }));
 		} else if (match[10]) {
 			const altText = match[11] || "image";
 			const imgRef = unwrapMarkdownDestination(match[12]);
@@ -385,7 +398,7 @@ function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] 
 				runs.push(createTextRun(`[Image: ${altText}]`, { italics: true }));
 			}
 		} else if (match[7]) {
-			runs.push(createTextRun(match[8], {
+			runs.push(createTextRun(unmark(match[8]), {
 				hyperlink: unwrapMarkdownDestination(match[9]),
 			}));
 		}
@@ -393,11 +406,11 @@ function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] 
 		lastIndex = match.index + match[0].length;
 	}
 
-	if (lastIndex < text.length) {
-		runs.push(createTextRun(text.slice(lastIndex)));
+	if (lastIndex < marked.length) {
+		runs.push(createTextRun(unmark(marked.slice(lastIndex))));
 	}
 
-	return runs.length > 0 ? runs : [createTextRun(text)];
+	return runs.length > 0 ? runs : [createTextRun(unmark(marked))];
 }
 
 function unwrapMarkdownDestination(value: string): string {
@@ -454,7 +467,24 @@ function buildDrawingXml(img: DocxImage, altText: string): string {
 }
 
 function parseTableRow(line: string): string[] {
-	return line.split("|").slice(1, -1).map((cell) => cell.trim());
+	// Split on unescaped pipes only: `\|` keeps a literal pipe inside the
+	// cell, left as-is so parseInline's escape handling restores it.
+	const cells: string[] = [];
+	let current = "";
+	for (let i = 0; i < line.length; i++) {
+		const ch = line[i];
+		if (ch === "\\" && i + 1 < line.length) {
+			current += ch + line[i + 1];
+			i++;
+		} else if (ch === "|") {
+			cells.push(current);
+			current = "";
+		} else {
+			current += ch;
+		}
+	}
+	cells.push(current);
+	return cells.slice(1, -1).map((cell) => cell.trim());
 }
 
 function assignHyperlinkRelationships(
