@@ -101,6 +101,18 @@ async function renderSections(
 	return { html: parts.join("\n"), warnings: allWarnings };
 }
 
+/**
+ * CommonMark backslash escapes: `\` followed by ASCII punctuation stands for
+ * the literal punctuation character. Shared by the basic HTML converter and
+ * the DOCX inline parser so both treat escapes identically.
+ */
+export const MARKDOWN_ESCAPE_RE = /\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g;
+
+// Placeholder sentinels for extracted escapes: private-use characters never
+// occur in real notes, so they cannot collide with literal text the way an
+// alphanumeric token (e.g. "ES3") could.
+const ESCAPE_PLACEHOLDER = "\uE000";
+
 export function markdownToBasicHtml(md: string): string {
 	// 1. Extract fenced code blocks
 	const codeBlocks: string[] = [];
@@ -123,10 +135,20 @@ export function markdownToBasicHtml(md: string): string {
 		return `IC${inlineCode.length - 1}`;
 	});
 
-	// 4. Escape remaining HTML
+	// 4. Extract backslash escapes (`\*`, `\|`, `\[`, …) so the escaped
+	// punctuation participates in no syntax rule: no emphasis pairing, no
+	// table-cell splitting, no link/image detection. Restored as literal
+	// characters after all conversion steps.
+	const escapes: string[] = [];
+	html = html.replace(MARKDOWN_ESCAPE_RE, (_match: string, ch: string) => {
+		escapes.push(ch);
+		return `${ESCAPE_PLACEHOLDER}${escapes.length - 1}\uE001`;
+	});
+
+	// 5. Escape remaining HTML
 	html = escapeHtml(html);
 
-	// 5. Tables
+	// 6. Tables
 	html = html.replace(/^(\|.+\|)\n(\|[-:| ]+\|)\n((?:\|.+\|\n?)+)/gm, (_, header: string, _align: string, body: string) => {
 		const ths = header.split("|").slice(1, -1).map(c => `<th>${c.trim()}</th>`).join("");
 		const rows = body.trim().split("\n").map(row => {
@@ -136,13 +158,13 @@ export function markdownToBasicHtml(md: string): string {
 		return `<table><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
 	});
 
-	// 6. Blockquotes
+	// 7. Blockquotes
 	html = html.replace(/^(&gt; .+(?:\n&gt; .+)*)/gm, (match) => {
 		const content = match.replace(/^&gt; /gm, "");
 		return `<blockquote>${content}</blockquote>`;
 	});
 
-	// 7. Task lists — consecutive task lines form one <ul>; a bare <li> is
+	// 8. Task lists — consecutive task lines form one <ul>; a bare <li> is
 	// invalid XHTML in EPUB chapters (element not allowed in body) and
 	// malformed in standalone HTML.
 	html = html.replace(/^(?:- \[[x ]\] .+(?:\n- \[[x ]\] .+)*)$/gm, (match) => {
@@ -156,22 +178,22 @@ export function markdownToBasicHtml(md: string): string {
 		return `<ul class="task-list">${items}</ul>`;
 	});
 
-	// 8. Unordered lists
+	// 9. Unordered lists
 	html = html.replace(/^(?:[*-] .+(?:\n[*-] .+)*)/gm, (match) => {
 		const items = match.split("\n").map(line => `<li>${line.replace(/^[*-] /, "")}</li>`).join("");
 		return `<ul>${items}</ul>`;
 	});
 
-	// 9. Ordered lists
+	// 10. Ordered lists
 	html = html.replace(/^(?:\d+\. .+(?:\n\d+\. .+)*)/gm, (match) => {
 		const items = match.split("\n").map(line => `<li>${line.replace(/^\d+\. /, "")}</li>`).join("");
 		return `<ol>${items}</ol>`;
 	});
 
-	// 10. Horizontal rules
+	// 11. Horizontal rules
 	html = html.replace(/^[-*_]{3,}\s*$/gm, "<hr>");
 
-	// 11. Headers
+	// 12. Headers
 	html = html.replace(/^######\s+(.+)$/gm, "<h6>$1</h6>");
 	html = html.replace(/^#####\s+(.+)$/gm, "<h5>$1</h5>");
 	html = html.replace(/^####\s+(.+)$/gm, "<h4>$1</h4>");
@@ -179,18 +201,20 @@ export function markdownToBasicHtml(md: string): string {
 	html = html.replace(/^##\s+(.+)$/gm, "<h2>$1</h2>");
 	html = html.replace(/^#\s+(.+)$/gm, "<h1>$1</h1>");
 
-	// 12. Inline formatting (strikethrough, bold, italic)
+	// 13. Inline formatting (strikethrough, bold, italic). Emphasis content
+	// must start and end with non-whitespace, matching CommonMark delimiter
+	// rules, so bare asterisks (`3 * 4 * 5`) stay literal.
 	html = html.replace(/~~(.+?)~~/g, "<del>$1</del>");
-	html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-	html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+	html = html.replace(/\*\*(\S(?:.*?\S)?)\*\*/g, "<strong>$1</strong>");
+	html = html.replace(/\*(\S(?:.*?\S)?)\*/g, "<em>$1</em>");
 
-	// 13. Images and links
+	// 14. Images and links
 	html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match: string, alt: string, src: string) => {
 		return renderEmbeddedImage(src, alt);
 	});
 	html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 
-	// 14. Paragraphs
+	// 15. Paragraphs
 	html = html
 		.split("\n\n")
 		.map((block) => {
@@ -206,13 +230,20 @@ export function markdownToBasicHtml(md: string): string {
 		})
 		.join("\n");
 
-	// 15. Restore inline code
+	// 16. Restore escapes as literal characters, HTML-escaped like the
+	// surrounding text (`\<` must come back as `&lt;`, not raw `<`).
+	html = html.replace(new RegExp(`${ESCAPE_PLACEHOLDER}(\\d+)\\uE001`, "g"), (match, idx: string) => {
+		const ch = escapes[parseInt(idx)];
+		return ch !== undefined ? escapeHtml(ch) : match;
+	});
+
+	// 17. Restore inline code
 	html = html.replace(/IC(\d+)/g, (_match: string, idx: string) => inlineCode[parseInt(idx)]);
 
-	// 16. Restore safe media blocks
+	// 18. Restore safe media blocks
 	html = html.replace(/MB(\d+)/g, (_match: string, idx: string) => mediaBlocks[parseInt(idx)]);
 
-	// 17. Restore code blocks
+	// 19. Restore code blocks
 	html = html.replace(/CB(\d+)/g, (_match: string, idx: string) => codeBlocks[parseInt(idx)]);
 
 	return html;

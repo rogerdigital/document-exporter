@@ -66,6 +66,26 @@ async function renderAndReadDocumentXml(markdown: string): Promise<string> {
 }
 
 describe("DOCX rendering", () => {
+	it("renders escaped asterisks as literal text without italics", async () => {
+		const xml = await renderAndReadDocumentXml("a \\* b \\* c");
+
+		expect(xml).toContain(">a * b * c<");
+		expect(xml).not.toContain("<w:i/>");
+	});
+
+	it("keeps an escaped pipe inside a table cell", async () => {
+		const markdown = [
+			"| a \\| b | c |",
+			"| --- | --- |",
+			"| 1 | 2 |",
+		].join("\n");
+
+		const xml = await renderAndReadDocumentXml(markdown);
+
+		expect(xml).toContain(">a | b<");
+		expect(xml).toContain(">c<");
+	});
+
 	it("writes valid table rows and preserves every cell value", async () => {
 		const markdown = [
 			"| Name | Value |",
