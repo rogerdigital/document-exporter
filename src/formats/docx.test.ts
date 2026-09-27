@@ -133,6 +133,52 @@ describe("DOCX rendering", () => {
 		expect(relationshipsXml).not.toContain("caption");
 	});
 
+	it("links to Word-compatible bookmarks on headings and the document title", async () => {
+		const xml = await renderAndReadDocumentXml(
+			"[Top](#fixture) [English](#section-one) [Chinese](#中文标题)\n\n## Section One\n\n## 中文标题",
+		);
+		const anchors = [...xml.matchAll(/<w:hyperlink w:anchor="([^"]+)"/g)].map(match => match[1]);
+		const bookmarks = [...xml.matchAll(/<w:bookmarkStart w:id="(\d+)" w:name="([^"]+)"\/>/g)];
+
+		expect(anchors).toHaveLength(3);
+		for (const anchor of anchors) {
+			expect(anchor).toMatch(/^[A-Za-z][A-Za-z0-9_]{0,39}$/);
+			expect(bookmarks.some(bookmark => bookmark[2] === anchor)).toBe(true);
+		}
+		const paragraphs = [...xml.matchAll(/<w:p>(.*?)<\/w:p>/g)].map(match => match[1]);
+		for (const [label, linkText] of [
+			["Fixture", "Top"],
+			["Section One", "English"],
+			["中文标题", "Chinese"],
+		]) {
+			const paragraph = paragraphs.find(value => value.includes(`>${label}</w:t>`));
+			expect(paragraph).toBeDefined();
+			const bookmark = paragraph?.match(/<w:bookmarkStart w:id="\d+" w:name="([^"]+)"\/>/)?.[1];
+			const link = xml.match(new RegExp(`<w:hyperlink w:anchor="([^"]+)"><w:r><w:t xml:space="preserve">${linkText}</w:t>`))?.[1];
+			expect(link).toBe(bookmark);
+		}
+		for (const bookmark of bookmarks) {
+			expect(xml).toContain(`<w:bookmarkEnd w:id="${bookmark[1]}"/>`);
+		}
+	});
+
+	it("keeps bookmark names unique when headings repeat", async () => {
+		const xml = await renderAndReadDocumentXml("## Same heading\n\n## Same heading");
+		const names = [...xml.matchAll(/<w:bookmarkStart w:id="\d+" w:name="([^"]+)"\/>/g)]
+			.map(match => match[1]);
+		expect(names).toHaveLength(3);
+		expect(new Set(names).size).toBe(names.length);
+	});
+
+	it("targets the visible text of a heading with an inline link", async () => {
+		const xml = await renderAndReadDocumentXml(
+			"[Jump](#linked-heading)\n\n## [Linked heading](https://example.com)",
+		);
+		const bookmark = xml.match(/<w:bookmarkStart w:id="\d+" w:name="([^"]+)"\/><w:hyperlink r:id=/)?.[1];
+		expect(bookmark).toBeDefined();
+		expect(xml).toContain(`<w:hyperlink w:anchor="${bookmark}">`);
+	});
+
 	it("writes a minimal DOCX package without external dependencies", async () => {
 		let writtenPath = "";
 		let writtenData: Uint8Array | null = null;
@@ -171,6 +217,38 @@ describe("DOCX rendering", () => {
 		expect(packageText).toContain("Export title");
 		expect(packageText).toContain("Heading");
 		expect(packageText).toContain("bold");
+	});
+
+	it("includes document settings in a DOCX without images or links", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => {
+				writtenData = data;
+			}),
+		};
+		const doc: AssembledDocument = {
+			title: "Editable document",
+			sections: [{
+				title: "Editable document",
+				sourcePath: "Note.md",
+				markdown: "Plain text",
+				frontmatter: {},
+			}],
+			attachments: [],
+		};
+		const plan = { outputRoot: "output", outputFilename: "document.docx" } as ExportPlan;
+
+		await renderDocx(doc, plan, writer as never);
+		if (!writtenData) throw new Error("DOCX was not written");
+
+		const settings = readStoredZipEntry(writtenData, "word/settings.xml");
+		const relationships = readStoredZipEntry(writtenData, "word/_rels/document.xml.rels");
+		const contentTypes = readStoredZipEntry(writtenData, "[Content_Types].xml");
+		expect(settings).toContain('<w:compatSetting w:name="compatibilityMode"');
+		expect(settings).toContain('w:val="15"');
+		expect(relationships).toContain('Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"');
+		expect(contentTypes).toContain('PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"');
 	});
 
 	it("supports heading levels 4-6", async () => {
@@ -278,6 +356,29 @@ describe("DOCX rendering", () => {
 		expect(packageText).toContain("word/media/image1.png");
 		expect(packageText).toContain("word/_rels/document.xml.rels");
 		expect(packageText).toContain("image/png");
+	});
+
+	it("registers embedded SVG images with the SVG media type", async () => {
+		let writtenData: Uint8Array | null = null;
+		const writer = {
+			ensureFolder: vi.fn(),
+			writeBinary: vi.fn((_path: string, data: Uint8Array) => { writtenData = data; }),
+		};
+		const svgData = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>');
+		const app = { vault: {
+			getAbstractFileByPath: () => makeTFile("assets/diagram.svg", "svg"),
+			readBinary: async () => svgData.buffer,
+		} };
+		const doc: AssembledDocument = {
+			title: "SVG",
+			sections: [{ title: "SVG", sourcePath: "note.md", markdown: "![Diagram](assets/diagram.svg)", frontmatter: {} }],
+			attachments: [{ sourcePath: "assets/diagram.svg", outputRelativePath: "assets/diagram.svg" }],
+		};
+
+		await renderDocx(doc, { outputRoot: "output", outputFilename: "test.docx" } as ExportPlan, writer as never, app as never);
+		if (!writtenData) throw new Error("DOCX was not written");
+		const contentTypes = readStoredZipEntry(writtenData, "[Content_Types].xml");
+		expect(contentTypes).toContain('Extension="svg" ContentType="image/svg+xml"');
 	});
 
 	it("limits embedded image width for readable document layout", async () => {

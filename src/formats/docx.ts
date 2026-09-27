@@ -1,6 +1,7 @@
 import { App, TFile } from "obsidian";
 import { AssembledDocument, AttachmentCopy, ExportPlan } from "@/types";
 import { OutputWriter } from "@/export/OutputWriter";
+import { slugify } from "@/export/LinkRewriter";
 import { createZip } from "@/formats/zip";
 import { MARKDOWN_ESCAPE_RE } from "@/formats/html-document";
 
@@ -20,6 +21,8 @@ type DocxParagraph = {
 	kind: "paragraph";
 	runs: DocxRun[];
 	style?: string;
+	anchors?: string[];
+	bookmarkId?: number;
 };
 
 type DocxTableCell = {
@@ -65,6 +68,7 @@ export async function renderDocx(
 
 	const images = await collectImages(doc.attachments, app, warnings);
 	const blocks = buildDocxBlocks(doc, images);
+	assignBookmarks(blocks);
 	const hyperlinks = assignHyperlinkRelationships(blocks, images.length + 2);
 	const documentXml = buildDocumentXml(blocks);
 
@@ -73,16 +77,15 @@ export async function renderDocx(
 		{ name: "_rels/.rels", data: encodeXml(PACKAGE_RELS_XML) },
 		{ name: "word/document.xml", data: encodeXml(documentXml) },
 		{ name: "word/styles.xml", data: encodeXml(STYLES_XML) },
-	];
-
-	if (images.length > 0 || hyperlinks.length > 0) {
-		files.push({
+		{ name: "word/settings.xml", data: encodeXml(SETTINGS_XML) },
+		{
 			name: "word/_rels/document.xml.rels",
 			data: encodeXml(buildRels(images, hyperlinks)),
-		});
-		for (const img of images) {
-			files.push({ name: img.mediaPath, data: img.data });
-		}
+		},
+	];
+
+	for (const img of images) {
+		files.push({ name: img.mediaPath, data: img.data });
 	}
 
 	const buffer = createZip(files);
@@ -176,7 +179,12 @@ function buildDocxBlocks(doc: AssembledDocument, images: DocxImage[]): DocxBlock
 	}
 
 	const blocks: DocxBlock[] = [
-		{ kind: "paragraph", style: "Title", runs: [{ text: doc.title }] },
+		{
+			kind: "paragraph",
+			style: "Title",
+			runs: [{ text: doc.title }],
+			anchors: [slugify(doc.title), ...(doc.sections.length === 1 ? [slugify(doc.sections[0].title)] : [])],
+		},
 	];
 	const isSingleSection = doc.sections.length === 1;
 
@@ -186,6 +194,7 @@ function buildDocxBlocks(doc: AssembledDocument, images: DocxImage[]): DocxBlock
 				kind: "paragraph",
 				style: "Heading1",
 				runs: [{ text: section.title }],
+				anchors: [slugify(section.title)],
 			});
 		}
 		blocks.push(...parseMarkdownToBlocks(section.markdown, imageMap));
@@ -244,10 +253,12 @@ function parseMarkdownToBlocks(markdown: string, imageMap: Map<string, DocxImage
 		const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
 		if (headingMatch) {
 			const level = Math.min(headingMatch[1].length, 6);
+			const runs = parseInline(headingMatch[2], imageMap);
 			blocks.push({
 				kind: "paragraph",
 				style: `Heading${level}`,
-				runs: parseInline(headingMatch[2], imageMap),
+				runs,
+				anchors: [slugify(runs.map(run => run.text).join(""))],
 			});
 			i++;
 			continue;
@@ -334,6 +345,33 @@ function parseMarkdownToBlocks(markdown: string, imageMap: Map<string, DocxImage
 	}
 
 	return blocks;
+}
+
+function assignBookmarks(blocks: DocxBlock[]): void {
+	const bookmarkNames = new Map<string, string>();
+	let nextId = 1;
+	for (const block of blocks) {
+		if (block.kind !== "paragraph" || !block.anchors?.some(Boolean)) continue;
+		block.bookmarkId = nextId++;
+		for (const anchor of block.anchors) {
+			if (anchor && !bookmarkNames.has(anchor)) bookmarkNames.set(anchor, `B${block.bookmarkId}`);
+		}
+	}
+
+	const rewriteRun = (run: DocxRun): void => {
+		if (!run.hyperlink?.startsWith("#")) return;
+		const bookmark = bookmarkNames.get(slugify(run.hyperlink.slice(1)));
+		if (bookmark) run.hyperlink = `#${bookmark}`;
+	};
+	for (const block of blocks) {
+		if (block.kind === "paragraph") {
+			block.runs.forEach(rewriteRun);
+		} else {
+			for (const row of block.rows) {
+				for (const cell of row) cell.runs.forEach(rewriteRun);
+			}
+		}
+	}
 }
 
 function buildTable(
@@ -553,7 +591,11 @@ function tableToXml(table: DocxTable): string {
 function paragraphToXml(paragraph: DocxParagraph): string {
 	const style = paragraph.style ? `<w:pPr><w:pStyle w:val="${paragraph.style}"/></w:pPr>` : "";
 	const runs = paragraph.runs.map(runToXml).join("");
-	return `<w:p>${style}${runs}</w:p>`;
+	const start = paragraph.bookmarkId
+		? `<w:bookmarkStart w:id="${paragraph.bookmarkId}" w:name="B${paragraph.bookmarkId}"/>`
+		: "";
+	const end = paragraph.bookmarkId ? `<w:bookmarkEnd w:id="${paragraph.bookmarkId}"/>` : "";
+	return `<w:p>${style}${start}${runs}${end}</w:p>`;
 }
 
 function runToXml(run: DocxRun): string {
@@ -594,7 +636,7 @@ function buildContentTypes(images: DocxImage[]): string {
 		imageTypes.add(img.ext);
 	}
 	const imageEntries = Array.from(imageTypes).map(ext => {
-		const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
+		const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "svg" ? "image/svg+xml" : `image/${ext}`;
 		return `<Default Extension="${ext}" ContentType="${mime}"/>`;
 	}).join("");
 
@@ -605,6 +647,7 @@ function buildContentTypes(images: DocxImage[]): string {
 ${imageEntries}
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
 </Types>`;
 }
 
@@ -619,6 +662,7 @@ function buildRels(images: DocxImage[], hyperlinks: DocxHyperlink[]): string {
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
 ${rels}
 ${hyperlinkRels}
 </Relationships>`;
@@ -648,6 +692,11 @@ const PACKAGE_RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>`;
+
+const SETTINGS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>
+</w:settings>`;
 
 const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
