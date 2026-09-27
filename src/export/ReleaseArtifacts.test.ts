@@ -267,7 +267,10 @@ describe("release artifacts (headless)", () => {
 
 		const documentXml = readStoredZipEntry(zip, "word/document.xml");
 		parseXml(documentXml);
-		parseXml(readStoredZipEntry(zip, "[Content_Types].xml"));
+		const contentTypes = readStoredZipEntry(zip, "[Content_Types].xml");
+		parseXml(contentTypes);
+		parseXml(readStoredZipEntry(zip, "word/settings.xml"));
+		expect(contentTypes).toContain('PartName="/word/settings.xml"');
 		for (const marker of [
 			"BEGIN-CONTENT", "END-CONTENT", "CODE-CONTENT",
 			"Alpha", "123", "中文", "456",
@@ -277,6 +280,7 @@ describe("release artifacts (headless)", () => {
 
 		const rels = readStoredZipEntry(zip, "word/_rels/document.xml.rels");
 		parseXml(rels);
+		expect(rels).toContain('Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"');
 		expect(rels).toContain('Target="media/image1.png"');
 		expect(rels).toContain('Target="media/image2.png"');
 		expect(rels).toContain('Target="https://example.com/"');
