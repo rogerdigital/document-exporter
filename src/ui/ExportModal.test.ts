@@ -38,7 +38,7 @@ function extendElement(el: HTMLElement): HTMLElement {
 
 function createModal(): ExportModal {
 	const app = { workspace: { getActiveFile: vi.fn(() => null) } };
-	const modal = new ExportModal(app as never, { ...DEFAULT_SETTINGS } as never);
+	const modal = new ExportModal(app as never, { ...DEFAULT_SETTINGS });
 	modal.contentEl = extendElement(document.createElement("div"));
 	return modal;
 }
