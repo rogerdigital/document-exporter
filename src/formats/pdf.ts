@@ -52,7 +52,7 @@ export async function renderPdf(
 
 	const htmlBody = `<h1>${escapeHtml(doc.title)}</h1>\n${toc}\n${finalBody}`;
 
-	const pdfBuffer = await printViaBrowserWindow(htmlBody, cssText + "\n" + printCss);
+	const pdfBuffer = await printViaBrowserWindow(htmlBody, cssText + "\n" + printCss, doc.title);
 	if (pdfBuffer.byteLength < MIN_VALID_PDF_BYTES) {
 		throw new Error("PDF generation failed: generated PDF is unexpectedly small; the print page may be blank");
 	}
@@ -169,9 +169,9 @@ interface DesktopWindow extends Window {
 	require?: (moduleId: string) => unknown;
 }
 
-export function buildPdfHtml(htmlBody: string, css: string): string {
+export function buildPdfHtml(htmlBody: string, css: string, title = "Export"): string {
 	return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Export</title><style>${css}
+<html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${css}
 ${PDF_PAGE_RESET_CSS}</style></head>
 <body><main class="pdf-export-page markdown-rendered">${htmlBody}</main></body></html>`;
 }
@@ -218,12 +218,12 @@ export function createPdfPrintOptions(): Parameters<PdfWebContents["printToPDF"]
 	};
 }
 
-async function printViaBrowserWindow(htmlBody: string, css: string): Promise<Uint8Array> {
+async function printViaBrowserWindow(htmlBody: string, css: string, title: string): Promise<Uint8Array> {
 	if (!Platform.isDesktop) {
 		throw new Error("PDF export requires the desktop app.");
 	}
 
-	const fullHtml = buildPdfHtml(htmlBody, css);
+	const fullHtml = buildPdfHtml(htmlBody, css, title);
 
 	const electron = getElectronModule();
 	const remote = electron.remote;
