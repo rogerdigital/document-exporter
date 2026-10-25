@@ -174,6 +174,7 @@ export default class DocumentExporterPlugin extends Plugin {
 				result.outputFolderName,
 			)
 				.setInputFiles(files.map((f) => f.path))
+				.setMergeIntoSingleFile(result.mergeIntoSingleFile === true)
 				.build();
 
 			const error = validatePlan(plan);
@@ -183,22 +184,22 @@ export default class DocumentExporterPlugin extends Plugin {
 			}
 
 			const runner = new ExportRunner(this.app);
-			const isSingleFile = files.length === 1;
+			const useDocPhases = files.length === 1 || result.mergeIntoSingleFile === true;
 			let singleFileStep = 0;
 
 			const callbacks: ExportProgressCallbacks = {
 				onFileStart: () => {
-					if (isSingleFile) {
+					if (useDocPhases) {
 						singleFileStep = 0;
 					}
 				},
 				onFileComplete: (i, total) => {
-					if (isSingleFile) return;
+					if (useDocPhases) return;
 					progress.setProgress(i + 1, total);
 				},
 				onPhase: (phase) => {
 					progress.setPhase(phase);
-					if (isSingleFile) {
+					if (useDocPhases) {
 						singleFileStep++;
 						progress.setProgress(singleFileStep, SINGLE_FILE_PHASES.length);
 					}
@@ -209,7 +210,7 @@ export default class DocumentExporterPlugin extends Plugin {
 				runner.cancel();
 			};
 
-			if (isSingleFile) {
+			if (useDocPhases) {
 				progress.start(SINGLE_FILE_PHASES.length);
 			} else {
 				progress.start(files.length);

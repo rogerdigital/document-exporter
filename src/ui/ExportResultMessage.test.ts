@@ -87,4 +87,25 @@ describe("exportResultMessage", () => {
 		expect(cancelled.startsWith("Export failed")).toBe(false);
 		expect(cancelled).toContain("Existing output was kept");
 	});
+
+	it("describes merged exports with note and file counts", () => {
+		expect(exportResultMessage(result({
+			totalFiles: 1,
+			completedFiles: 1,
+			mergedNotes: 12,
+		}))).toBe("Export complete: merged 12 note(s) into 1 file(s) — exports/notes");
+	});
+
+	it("describes a cancelled merged export without a partial output", () => {
+		const message = exportResultMessage(result({
+			status: "cancelled",
+			success: false,
+			totalFiles: 1,
+			completedFiles: 0,
+			mergedNotes: 12,
+		}));
+		expect(message).toContain("Export cancelled: merged 12 note(s) into 0 file(s)");
+		expect(message.startsWith("Export complete")).toBe(false);
+		expect(message.startsWith("Export failed")).toBe(false);
+	});
 });

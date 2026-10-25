@@ -224,6 +224,96 @@ describe("ExportPlanBuilder", () => {
 	});
 });
 
+describe("merged single-file output", () => {
+	const mockApp = {
+		metadataCache: {
+			getFirstLinkpathDest: vi.fn(),
+		},
+	} as never;
+
+	it("computes one merged output under the batch folder", () => {
+		const plan = new ExportPlanBuilder(
+			mockApp,
+			{ type: "folder", path: "book", recursive: true },
+			"pdf", "exports", "My Book", "book",
+		)
+			.setInputFiles(["book/a.md", "book/sub/b.md"])
+			.setMergeIntoSingleFile(true)
+			.build();
+
+		expect(plan.mergeIntoSingleFile).toBe(true);
+		expect(plan.outputFiles).toEqual(["exports/book/My Book.pdf"]);
+	});
+
+	it("computes merged output directly under the output root without a folder name", () => {
+		const plan = new ExportPlanBuilder(
+			mockApp,
+			{ type: "files", paths: ["a.md"] },
+			"markdown-bundle", "exports", "merged",
+		)
+			.setInputFiles(["a.md", "b.md"])
+			.setMergeIntoSingleFile(true)
+			.build();
+
+		expect(plan.outputFiles).toEqual(["exports/merged.md"]);
+	});
+
+	it("strips a stale extension from the merged file name", () => {
+		const plan = new ExportPlanBuilder(
+			mockApp,
+			{ type: "folder", path: "book", recursive: true },
+			"epub", "exports", "book.epub", "book",
+		)
+			.setInputFiles(["book/a.md"])
+			.setMergeIntoSingleFile(true)
+			.build();
+
+		expect(plan.outputFiles).toEqual(["exports/book/book.epub"]);
+	});
+
+	it("keeps per-file outputs when the merge flag is off", () => {
+		const plan = new ExportPlanBuilder(
+			mockApp,
+			{ type: "folder", path: "book", recursive: true },
+			"pdf", "exports", "My Book", "book",
+		)
+			.setInputFiles(["book/a.md", "book/b.md"])
+			.build();
+
+		expect(plan.outputFiles).toEqual(["exports/book/a.pdf", "exports/book/b.pdf"]);
+	});
+
+	it("ignores the merge flag for current-file sources", () => {
+		const plan = new ExportPlanBuilder(
+			mockApp,
+			{ type: "current-file", path: "note.md" },
+			"pdf", "exports", "note",
+		)
+			.setInputFiles(["note.md"])
+			.setMergeIntoSingleFile(true)
+			.build();
+
+		expect(plan.outputFiles).toEqual(["exports/note.pdf"]);
+		expect(plan.mergeIntoSingleFile).toBe(true);
+	});
+
+	it("relocates the merged output with the batch leaf", () => {
+		const plan = new ExportPlanBuilder(
+			mockApp,
+			{ type: "folder", path: "book", recursive: true },
+			"pdf", "exports", "My Book", "book",
+		)
+			.setInputFiles(["book/a.md"])
+			.setMergeIntoSingleFile(true)
+			.build();
+
+		const relocated = relocatePlan(plan, "exports", "book-2026-10-25");
+
+		expect(relocated.mergeIntoSingleFile).toBe(true);
+		expect(relocated.outputFiles).toEqual(["exports/book-2026-10-25/My Book.pdf"]);
+	});
+});
+
 describe("relocatePlan", () => {
 	it("recomputes a single output file from the new root", () => {
 		const relocated = relocatePlan(makePlan(), "exports-2026-07-29");

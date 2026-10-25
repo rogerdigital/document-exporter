@@ -11,6 +11,7 @@ import { renderDocx } from "@/formats/docx";
 import { renderEpub } from "@/formats/epub";
 import { relocatePlan } from "@/export/ExportPlan";
 import { isProfileSupported } from "@/export/ProfileCapabilities";
+import { extensionForProfile } from "@/export/utils";
 import { joinMarkdownFragments } from "@/export/FragmentJoiner";
 import { ExportResult, resolveExportStatus } from "@/export/ExportOutcome";
 
@@ -121,36 +122,52 @@ export class ExportRunner {
 			: null;
 
 		const isSingleFile = files.length === 1;
+		const mergedIntoSingleFile =
+			effectivePlan.mergeIntoSingleFile === true
+			&& effectivePlan.source.type !== "current-file";
+		// Each group renders into one output: one note per group normally, all
+		// notes together for merged exports.
+		const groups: import("obsidian").TFile[][] = mergedIntoSingleFile
+			? [files]
+			: files.map((f) => [f]);
+		const groupOutputs: string[] = mergedIntoSingleFile
+			? [effectivePlan.outputFiles[0] ?? `${assetsRoot}/merged.${extensionForProfile(effectivePlan.profile)}`]
+			: files.map((f) => outputPathMap.get(f.path) ?? "");
+		const useDocPhases = isSingleFile || mergedIntoSingleFile;
 
 		runLoop:
-		for (let i = 0; i < files.length; i++) {
+		for (let i = 0; i < groups.length; i++) {
 			if (this.cancelled) break;
 
-			const file = files[i];
-			const outputFilePath = outputPathMap.get(file.path) ?? effectivePlan.outputFiles[i];
+			const group = groups[i];
+			const primary = group[0];
+			const outputFilePath = groupOutputs[i] ?? effectivePlan.outputFiles[i];
+			const docTitle = mergedIntoSingleFile
+				? outputFilePath.slice(outputFilePath.lastIndexOf("/") + 1).replace(/\.[a-z0-9]+$/i, "")
+				: undefined;
 			let attachmentFailed = false;
 
-			callbacks?.onFileStart(i, files.length, file.basename);
+			callbacks?.onFileStart(i, groups.length, docTitle ?? primary.basename);
 
 			try {
-				// Step 1: Assemble single-file document
-				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[0] : `Assembling ${file.basename}`);
-				const doc = await assembler.assemble([file]);
+				// Step 1: Assemble document
+				callbacks?.onPhase(useDocPhases ? SINGLE_FILE_PHASES[0] : `Assembling ${primary.basename}`);
+				const doc = await assembler.assemble(group, docTitle);
 				allWarnings.push(...(doc.warnings ?? []));
 				if (this.cancelled) break;
 
-				// Step 2: Collect attachments for this file (embedded notes contribute
+				// Step 2: Collect attachments for this group (embedded notes contribute
 				// their own references; AttachmentCollector only adds non-markdown files)
 				let attachments = effectivePlan.attachmentCopies;
 				if (collector) {
-					callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[1] : `Collecting attachments for ${file.basename}`);
+					callbacks?.onPhase(useDocPhases ? SINGLE_FILE_PHASES[1] : `Collecting attachments for ${primary.basename}`);
 					const embeddedFiles = (doc.embeddedPaths ?? [])
 						.map((p) => this.app.vault.getAbstractFileByPath(p))
 						.filter(
 							(f): f is import("obsidian").TFile =>
 								f !== null && "extension" in f && (f as import("obsidian").TFile).extension === "md",
 						);
-					const collectResult = await collector.collect([file, ...embeddedFiles]);
+					const collectResult = await collector.collect([...group, ...embeddedFiles]);
 					attachments = collectResult.attachments;
 					allWarnings.push(...collectResult.warnings);
 				}
@@ -159,13 +176,15 @@ export class ExportRunner {
 
 				// Step 3: Rewrite links — per fragment, so content from embedded notes
 				// resolves against its own source path rather than the host's.
-				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[2] : `Rewriting links in ${file.basename}`);
+				callbacks?.onPhase(useDocPhases ? SINGLE_FILE_PHASES[2] : `Rewriting links in ${primary.basename}`);
 				const rewriter = new LinkRewriter(
 					this.app,
 					exportedPaths,
 					attachments,
 					effectivePlan.profile,
-					outputPathMap,
+					// Merged notes share one output, so cross-note links fall back
+					// to in-document anchors instead of pointing at vanished files.
+					mergedIntoSingleFile ? new Map<string, string>() : outputPathMap,
 					outputFilePath,
 					assetsRoot,
 				);
@@ -206,7 +225,7 @@ export class ExportRunner {
 				// Step 5: Render format. The renderer can fail after partially
 				// writing, so the primary counts as incomplete until all of its
 				// required writes have succeeded.
-				callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[3] : `Rendering ${file.basename}`);
+				callbacks?.onPhase(useDocPhases ? SINGLE_FILE_PHASES[3] : `Rendering ${primary.basename}`);
 				incompletePaths.add(outputFilePath);
 				let formatWarnings: string[] = [];
 				switch (effectivePlan.profile) {
@@ -236,7 +255,7 @@ export class ExportRunner {
 					&& effectivePlan.profile !== "epub"
 					&& doc.attachments.length > 0
 				) {
-					callbacks?.onPhase(isSingleFile ? SINGLE_FILE_PHASES[4] : `Copying attachments for ${file.basename}`);
+					callbacks?.onPhase(useDocPhases ? SINGLE_FILE_PHASES[4] : `Copying attachments for ${primary.basename}`);
 					await writer.ensureFolder(`${assetsRoot}/assets`);
 					if (this.cancelled) break;
 
@@ -263,32 +282,36 @@ export class ExportRunner {
 				}
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
-				errors.push(`Export failed for ${file.path}: ${msg}`);
+				errors.push(`Export failed for ${mergedIntoSingleFile ? "merged export" : primary.path}: ${msg}`);
 				hasFailure = true;
 				break;
 			}
 
 			if (attachmentFailed) continue;
 
-			// All required writes for this file succeeded and cancellation did not
-			// interrupt it.
+			// All required writes for this group succeeded and cancellation did
+			// not interrupt it.
 			incompletePaths.delete(outputFilePath);
 			completedPaths.push(outputFilePath);
-			callbacks?.onFileComplete(completedPaths.length - 1, files.length);
+			callbacks?.onFileComplete(completedPaths.length - 1, groups.length);
 		}
 
 		if (this.cancelled) {
-			const completed = completedPaths.length;
-			const total = requestedPaths.length;
-			allWarnings.push(
-				total === 1
-					? "Export was cancelled."
-					: `Export was cancelled. ${completed} of ${total} file(s) exported.`,
-			);
+			if (mergedIntoSingleFile) {
+				allWarnings.push("Export was cancelled. The merged output may be incomplete.");
+			} else {
+				const completed = completedPaths.length;
+				const total = requestedPaths.length;
+				allWarnings.push(
+					total === 1
+						? "Export was cancelled."
+						: `Export was cancelled. ${completed} of ${total} file(s) exported.`,
+				);
+			}
 		}
 
 		const status = resolveExportStatus(
-			this.cancelled, completedPaths.length, requestedPaths.length, hasFailure,
+			this.cancelled, completedPaths.length, groups.length, hasFailure,
 		);
 
 		// Write a report only when the run reached its output-writing stage and
@@ -316,8 +339,9 @@ export class ExportRunner {
 
 		return {
 			status, success: status === "completed", outputRoot: assetsRoot,
-			totalFiles: requestedPaths.length,
+			totalFiles: mergedIntoSingleFile ? 1 : requestedPaths.length,
 			completedFiles: completedPaths.length,
+			...(mergedIntoSingleFile ? { mergedNotes: files.length } : {}),
 			completedPaths, incompletePaths: [...incompletePaths],
 			warnings: allWarnings, errors,
 			...(reportPath ? { reportPath } : {}),
@@ -352,7 +376,9 @@ export class ExportRunner {
 			"# Export Report",
 			"",
 			`Status: ${status}`,
-			`Files: ${outcome.completedPaths.length} of ${plan.inputFiles.length} complete`,
+			plan.mergeIntoSingleFile
+				? `Files: ${outcome.completedPaths.length} merged output(s) complete (${plan.inputFiles.length} notes)`
+				: `Files: ${outcome.completedPaths.length} of ${plan.inputFiles.length} complete`,
 		];
 		if (outcome.completedPaths.length > 0) {
 			lines.push("", "## Completed", ...outcome.completedPaths.map((p) => `- ${p}`));

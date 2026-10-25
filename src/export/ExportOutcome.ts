@@ -10,6 +10,8 @@ export interface ExportResult {
 	incompletePaths: string[]; // outputs that may exist but are not complete
 	warnings: string[];
 	errors: string[];
+	/** Merged exports only: number of notes consolidated into the single output. */
+	mergedNotes?: number;
 	reportPath?: string;
 }
 
