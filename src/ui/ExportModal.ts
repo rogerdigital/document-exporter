@@ -175,16 +175,6 @@ export class ExportModal extends Modal {
 			const isBatch = this.sourceType !== "current-file";
 
 			if (isBatch) {
-				const mergeRow = nameFieldContainer.createDiv({ cls: "export-modal-row" });
-				const mergeLabel = mergeRow.createEl("label");
-				const checkbox = mergeLabel.createEl("input", { type: "checkbox" });
-				checkbox.checked = this.mergeIntoSingleFile;
-				mergeLabel.appendText(" Merge into a single file");
-				checkbox.addEventListener("change", () => {
-					this.mergeIntoSingleFile = checkbox.checked;
-					renderNameField();
-				});
-
 				if (this.mergeIntoSingleFile) {
 					this.outputFilename = defaultMergeFilename(this.sourceType, this.folderPath);
 					const nameRow = nameFieldContainer.createDiv({ cls: "export-modal-row" });
@@ -212,6 +202,16 @@ export class ExportModal extends Modal {
 					});
 					filenameInput = null;
 				}
+
+				const mergeRow = nameFieldContainer.createDiv({ cls: "export-modal-merge-row" });
+				const mergeLabel = mergeRow.createEl("label");
+				const checkbox = mergeLabel.createEl("input", { type: "checkbox" });
+				checkbox.checked = this.mergeIntoSingleFile;
+				mergeLabel.appendText(" Merge into a single file");
+				checkbox.addEventListener("change", () => {
+					this.mergeIntoSingleFile = checkbox.checked;
+					renderNameField();
+				});
 			} else {
 				const row = nameFieldContainer.createDiv({ cls: "export-modal-row" });
 				row.createEl("label", { text: "File name" });

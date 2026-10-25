@@ -18,6 +18,20 @@
 	min-width: 0;
 }
 
+.export-modal-merge-row {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: 0.75em;
+}
+
+.export-modal-merge-row label {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	white-space: nowrap;
+	font-weight: 500;
+}
+
 .export-modal-source-fields {
 	margin-left: 9em;
 	margin-bottom: 0.75em;
