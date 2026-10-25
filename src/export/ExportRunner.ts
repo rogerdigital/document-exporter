@@ -1,8 +1,8 @@
 import { App, Platform } from "obsidian";
-import { DocumentFragment, ExportPlan, ExportSettings } from "@/types";
+import { DocumentFragment, ExportPlan, ExportProfileId, ExportSettings } from "@/types";
 import { DocumentAssembler } from "@/export/DocumentAssembler";
 import { AttachmentCollector } from "@/export/AttachmentCollector";
-import { LinkRewriter } from "@/export/LinkRewriter";
+import { LinkRewriter, slugify } from "@/export/LinkRewriter";
 import { OutputWriter } from "@/export/OutputWriter";
 import { renderMarkdownBundle } from "@/formats/markdown-bundle";
 import { renderHtmlDocument } from "@/formats/html-document";
@@ -23,6 +23,19 @@ export interface ExportProgressCallbacks {
 	onFileStart: (fileIndex: number, totalFiles: number, fileName: string) => void;
 	onFileComplete: (fileIndex: number, totalFiles: number) => void;
 	onPhase: (phase: string) => void;
+}
+
+// The anchor a merged export's renderer actually emits for a section:
+// HTML/PDF wrap each section as #section-N; Markdown headings and DOCX
+// bookmarks are addressed by the section title slug.
+export function mergedAnchorFor(
+	profile: ExportProfileId,
+	sectionTitle: string,
+	sectionIndex: number,
+): string {
+	return profile === "html-document" || profile === "pdf"
+		? `#section-${sectionIndex}`
+		: `#${slugify(sectionTitle)}`;
 }
 
 export const SINGLE_FILE_PHASES = [
@@ -177,16 +190,26 @@ export class ExportRunner {
 				// Step 3: Rewrite links — per fragment, so content from embedded notes
 				// resolves against its own source path rather than the host's.
 				callbacks?.onPhase(useDocPhases ? SINGLE_FILE_PHASES[2] : `Rewriting links in ${primary.basename}`);
+				const mergedAnchors = new Map<string, string>();
+				if (mergedIntoSingleFile) {
+					doc.sections.forEach((section, sectionIndex) => {
+						mergedAnchors.set(
+							section.sourcePath,
+							mergedAnchorFor(effectivePlan.profile, section.title, sectionIndex),
+						);
+					});
+				}
 				const rewriter = new LinkRewriter(
 					this.app,
 					exportedPaths,
 					attachments,
 					effectivePlan.profile,
-					// Merged notes share one output, so cross-note links fall back
-					// to in-document anchors instead of pointing at vanished files.
+					// Merged notes share one output, so cross-note links resolve
+					// through mergedAnchors instead of per-note output files.
 					mergedIntoSingleFile ? new Map<string, string>() : outputPathMap,
 					outputFilePath,
 					assetsRoot,
+					mergedAnchors,
 				);
 				let sawUnexpandedEmbed = false;
 				for (const section of doc.sections) {

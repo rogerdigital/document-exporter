@@ -144,6 +144,9 @@ export class ExportModal extends Modal {
 
 		sourceSelect.addEventListener("change", () => {
 			this.sourceType = sourceSelect.value;
+			if (this.mergeIntoSingleFile) {
+				this.outputFilename = defaultMergeFilename(this.sourceType, this.folderPath);
+			}
 			renderSourceFields();
 			renderNameField();
 			updateDefaultFilename();
@@ -176,7 +179,6 @@ export class ExportModal extends Modal {
 
 			if (isBatch) {
 				if (this.mergeIntoSingleFile) {
-					this.outputFilename = defaultMergeFilename(this.sourceType, this.folderPath);
 					const nameRow = nameFieldContainer.createDiv({ cls: "export-modal-row" });
 					nameRow.createEl("label", { text: "File name" });
 					const input = nameRow.createEl("input", {
@@ -210,6 +212,11 @@ export class ExportModal extends Modal {
 				mergeLabel.appendText(" Merge into a single file");
 				checkbox.addEventListener("change", () => {
 					this.mergeIntoSingleFile = checkbox.checked;
+					// Seed the default only on toggle, so re-renders (e.g. coming
+					// back from the confirmation page) keep a customized name.
+					if (this.mergeIntoSingleFile) {
+						this.outputFilename = defaultMergeFilename(this.sourceType, this.folderPath);
+					}
 					renderNameField();
 				});
 			} else {
