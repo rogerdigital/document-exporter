@@ -260,9 +260,9 @@ describe("merged single-file export", () => {
 		);
 
 		expect(result.success).toBe(true);
-		expect(result.completedPaths).toEqual(["exports/book/My Book.md"]);
+		expect(result.completedPaths).toEqual(["exports/My Book.md"]);
 		expect(result.mergedNotes).toBe(2);
-		const merged = fixture.text("exports/book/My Book.md");
+		const merged = fixture.text("exports/My Book.md");
 		expect(merged).toContain("# My Book");
 		expect(merged).toContain("## 01-intro");
 		expect(merged).toContain("## 02-chapter");
@@ -272,7 +272,7 @@ describe("merged single-file export", () => {
 		expect(fixture.paths().filter((p) => p.endsWith(".md")).sort()).toEqual([
 			"book/01-intro.md",
 			"book/02-chapter.md",
-			"exports/book/My Book.md",
+			"exports/My Book.md",
 		]);
 	});
 
@@ -288,9 +288,26 @@ describe("merged single-file export", () => {
 		);
 
 		expect(result.success).toBe(true);
-		expect(Array.from(fixture.bytes("exports/book/assets/img.png"))).toEqual([9]);
-		const merged = fixture.text("exports/book/merged.md");
+		expect(Array.from(fixture.bytes("exports/assets/img.png"))).toEqual([9]);
+		const merged = fixture.text("exports/merged.md");
 		expect(merged.match(/assets\/img\.png/g)).toHaveLength(2);
+	});
+
+	it("relocates the whole output root when the merged destination exists", async () => {
+		vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue(TIMESTAMP);
+		const fixture = createMemoryVault();
+		fixture.putText("book/a.md", "A content");
+		await fixture.app.vault.createFolder("exports");
+
+		const result = await new ExportRunner(fixture.app).run(
+			mergedPlan(fixture, ["book/a.md"], "My Book"),
+			integritySettings(),
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.outputRoot).toBe(`exports-${TIMESTAMP}`);
+		expect(fixture.text(`exports-${TIMESTAMP}/My Book.md`)).toContain("A content");
+		expect(fixture.paths()).not.toContain("exports/My Book.md");
 	});
 
 	it("records missing notes as errors while merging the remaining ones", async () => {
@@ -305,7 +322,7 @@ describe("merged single-file export", () => {
 		expect(result.status).toBe("partial");
 		expect(result.mergedNotes).toBe(1);
 		expect(result.errors.join("\n")).toContain("book/gone.md");
-		expect(fixture.text("exports/book/merged.md")).toContain("A content");
+		expect(fixture.text("exports/merged.md")).toContain("A content");
 	});
 
 	it("reports a cancelled merged export without a partial output", async () => {
@@ -326,6 +343,6 @@ describe("merged single-file export", () => {
 
 		expect(result.status).toBe("cancelled");
 		expect(result.completedPaths).toEqual([]);
-		expect(fixture.paths()).not.toContain("exports/book/merged.md");
+		expect(fixture.paths()).not.toContain("exports/merged.md");
 	});
 });

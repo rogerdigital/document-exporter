@@ -231,7 +231,7 @@ describe("merged single-file output", () => {
 		},
 	} as never;
 
-	it("computes one merged output under the batch folder", () => {
+	it("computes one merged output directly under the output root, ignoring the folder name", () => {
 		const plan = new ExportPlanBuilder(
 			mockApp,
 			{ type: "folder", path: "book", recursive: true },
@@ -242,7 +242,7 @@ describe("merged single-file output", () => {
 			.build();
 
 		expect(plan.mergeIntoSingleFile).toBe(true);
-		expect(plan.outputFiles).toEqual(["exports/book/My Book.pdf"]);
+		expect(plan.outputFiles).toEqual(["exports/My Book.pdf"]);
 	});
 
 	it("computes merged output directly under the output root without a folder name", () => {
@@ -268,7 +268,7 @@ describe("merged single-file output", () => {
 			.setMergeIntoSingleFile(true)
 			.build();
 
-		expect(plan.outputFiles).toEqual(["exports/book/book.epub"]);
+		expect(plan.outputFiles).toEqual(["exports/book.epub"]);
 	});
 
 	it("keeps per-file outputs when the merge flag is off", () => {
@@ -297,7 +297,7 @@ describe("merged single-file output", () => {
 		expect(plan.mergeIntoSingleFile).toBe(true);
 	});
 
-	it("relocates the merged output with the batch leaf", () => {
+	it("relocates the merged output with the output root", () => {
 		const plan = new ExportPlanBuilder(
 			mockApp,
 			{ type: "folder", path: "book", recursive: true },
@@ -307,10 +307,10 @@ describe("merged single-file output", () => {
 			.setMergeIntoSingleFile(true)
 			.build();
 
-		const relocated = relocatePlan(plan, "exports", "book-2026-10-25");
+		const relocated = relocatePlan(plan, "exports-2026-10-25");
 
 		expect(relocated.mergeIntoSingleFile).toBe(true);
-		expect(relocated.outputFiles).toEqual(["exports/book-2026-10-25/My Book.pdf"]);
+		expect(relocated.outputFiles).toEqual(["exports-2026-10-25/My Book.pdf"]);
 	});
 });
 

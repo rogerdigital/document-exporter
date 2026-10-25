@@ -52,7 +52,7 @@ export function computeOutputFiles(layout: OutputLayout): string[] {
 
 	if (layout.mergeIntoSingleFile) {
 		const baseName = layout.outputFilename.replace(/\.(md|html|htm|pdf|docx|epub)$/i, "");
-		return [`${root}/${baseName}.${ext}`];
+		return [`${layout.outputRoot}/${baseName}.${ext}`];
 	}
 
 	if (layout.source.type === "folder") {
@@ -116,13 +116,18 @@ export class ExportPlanBuilder {
 	}
 
 	build(): ExportPlan {
+		// Merged exports have no batch leaf: output and assets sit directly
+		// under the output root, so the folder name must not survive.
+		const outputFolderName = this.mergeIntoSingleFile
+			? undefined
+			: this.outputFolderName;
 		return {
 			profile: this.profile,
 			source: this.source,
 			inputFiles: this.inputFiles,
 			outputRoot: this.outputRoot,
 			outputFilename: this.outputFilename,
-			outputFolderName: this.outputFolderName,
+			outputFolderName,
 			...(this.mergeIntoSingleFile ? { mergeIntoSingleFile: true } : {}),
 			outputFiles: computeOutputFiles({
 				profile: this.profile,
@@ -130,7 +135,7 @@ export class ExportPlanBuilder {
 				inputFiles: this.inputFiles,
 				outputRoot: this.outputRoot,
 				outputFilename: this.outputFilename,
-				outputFolderName: this.outputFolderName,
+				outputFolderName,
 				mergeIntoSingleFile: this.mergeIntoSingleFile,
 			}),
 			attachmentCopies: [],

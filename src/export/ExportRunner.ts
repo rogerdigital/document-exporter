@@ -424,9 +424,11 @@ export class ExportRunner {
 		settings: ExportSettings,
 		writer: OutputWriter,
 	): ExportPlan {
+		// Merged exports behave like single-file exports: one output plus
+		// assets directly under the output root, relocated as a whole.
 		if (settings.overwriteExisting) return plan;
 
-		if (plan.source.type === "current-file") {
+		if (plan.source.type === "current-file" || plan.mergeIntoSingleFile) {
 			// Reuse the single-file output root only if nothing occupies it;
 			// an existing file or directory — even an empty one — relocates the
 			// whole export so previous outputs keep their attachments.

@@ -65,7 +65,7 @@ A progress bar appears during export showing the current step or file. Click **C
 1. Right-click a folder → **Export this folder**
 2. Format: **PDF** → enable **Merge into a single file** → set the file name
 3. Click **Export**
-4. Result: `exports/<foldername>/<file name>.pdf` containing every note as a section, with a table of contents
+4. Result: `<output folder>/<file name>.pdf` containing every note as a section, with a table of contents
 
 ## Settings
 

@@ -173,20 +173,8 @@ export class ExportModal extends Modal {
 		const renderNameField = () => {
 			nameFieldContainer.empty();
 			const isBatch = this.sourceType !== "current-file";
-			const row = nameFieldContainer.createDiv({ cls: "export-modal-row" });
 
 			if (isBatch) {
-				this.updateDefaultFolderName();
-				row.createEl("label", { text: "Folder name" });
-				const input = row.createEl("input", {
-					type: "text",
-					attr: { placeholder: this.sourceType === "folder" ? "folder name" : "files" },
-				});
-				input.value = this.outputFolderName;
-				input.addEventListener("input", (e) => {
-					this.outputFolderName = (e.target as HTMLInputElement).value;
-				});
-
 				const mergeRow = nameFieldContainer.createDiv({ cls: "export-modal-row" });
 				const mergeLabel = mergeRow.createEl("label");
 				const checkbox = mergeLabel.createEl("input", { type: "checkbox" });
@@ -194,31 +182,38 @@ export class ExportModal extends Modal {
 				mergeLabel.appendText(" Merge into a single file");
 				checkbox.addEventListener("change", () => {
 					this.mergeIntoSingleFile = checkbox.checked;
-					renderMergeFileName();
+					renderNameField();
 				});
 
-				const mergeNameContainer = nameFieldContainer.createDiv();
-				const renderMergeFileName = () => {
-					mergeNameContainer.empty();
-					if (!this.mergeIntoSingleFile) {
-						filenameInput = null;
-						return;
-					}
+				if (this.mergeIntoSingleFile) {
 					this.outputFilename = defaultMergeFilename(this.sourceType, this.folderPath);
-					const nameRow = mergeNameContainer.createDiv({ cls: "export-modal-row" });
+					const nameRow = nameFieldContainer.createDiv({ cls: "export-modal-row" });
 					nameRow.createEl("label", { text: "File name" });
-					const mergedInput = nameRow.createEl("input", {
+					const input = nameRow.createEl("input", {
 						type: "text",
 						attr: { placeholder: "Merged" },
 					});
-					mergedInput.value = this.outputFilename;
-					mergedInput.addEventListener("input", (e) => {
+					input.value = this.outputFilename;
+					input.addEventListener("input", (e) => {
 						this.outputFilename = (e.target as HTMLInputElement).value;
 					});
-					filenameInput = mergedInput;
-				};
-				renderMergeFileName();
+					filenameInput = input;
+				} else {
+					this.updateDefaultFolderName();
+					const nameRow = nameFieldContainer.createDiv({ cls: "export-modal-row" });
+					nameRow.createEl("label", { text: "Folder name" });
+					const input = nameRow.createEl("input", {
+						type: "text",
+						attr: { placeholder: this.sourceType === "folder" ? "folder name" : "files" },
+					});
+					input.value = this.outputFolderName;
+					input.addEventListener("input", (e) => {
+						this.outputFolderName = (e.target as HTMLInputElement).value;
+					});
+					filenameInput = null;
+				}
 			} else {
+				const row = nameFieldContainer.createDiv({ cls: "export-modal-row" });
 				row.createEl("label", { text: "File name" });
 				const input = row.createEl("input", {
 					type: "text",
@@ -346,9 +341,8 @@ export class ExportModal extends Modal {
 		if (isSingleFile) {
 			summary.createEl("p", { text: `Output: ${result.outputFolder}/${result.outputFilename}` });
 		} else if (result.mergeIntoSingleFile) {
-			const folderName = result.outputFolderName ?? "export";
 			summary.createEl("p", {
-				text: `Output: ${result.outputFolder}/${folderName}/${result.outputFilename} (merged into a single file)`,
+				text: `Output: ${result.outputFolder}/${result.outputFilename} (merged into a single file)`,
 			});
 		} else {
 			const folderName = result.outputFolderName ?? "export";
@@ -404,7 +398,10 @@ export class ExportModal extends Modal {
 			profile: this.profile,
 			outputFolder: this.outputFolder,
 			outputFilename: this.outputFilename || "export",
-			outputFolderName: isBatch ? (this.outputFolderName || "files") : undefined,
+			outputFolderName:
+				isBatch && !this.mergeIntoSingleFile
+					? (this.outputFolderName || "files")
+					: undefined,
 			mergeIntoSingleFile: isBatch && this.mergeIntoSingleFile ? true : undefined,
 		};
 	}
