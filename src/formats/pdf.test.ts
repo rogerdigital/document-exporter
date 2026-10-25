@@ -55,6 +55,19 @@ describe("PDF rendering", () => {
 		expect(html).toContain("<p>Content</p>");
 	});
 
+	it("uses the document title for the page title tag", () => {
+		const html = buildPdfHtml("<h1>Book</h1>", "", "06-生活区域");
+
+		expect(html).toContain("<title>06-生活区域</title>");
+		expect(html).not.toContain("<title>Export</title>");
+	});
+
+	it("escapes HTML-significant characters in the page title", () => {
+		const html = buildPdfHtml("<h1>x</h1>", "", 'a<b>&"c');
+
+		expect(html).toContain("<title>a&lt;b&gt;&amp;&quot;c</title>");
+	});
+
 	it("adds PDF-specific image sizing rules", () => {
 		const html = buildPdfHtml("<p><img src=\"image.png\"></p>", "");
 

@@ -25,6 +25,7 @@ export type ExportModalResult = {
 	outputFolder: string;
 	outputFilename: string;
 	outputFolderName?: string;
+	mergeIntoSingleFile?: boolean;
 };
 
 export function deriveDefaultFilename(
@@ -37,6 +38,13 @@ export function deriveDefaultFilename(
 	return app.workspace.getActiveFile()?.basename ?? "export";
 }
 
+export function defaultMergeFilename(sourceType: string, folderPath: string): string {
+	if (sourceType === "folder") {
+		return folderPath.split("/").pop() || "merged";
+	}
+	return "merged";
+}
+
 export class ExportModal extends Modal {
 	private settings: ExportSettings;
 	private resolve: ((result: ExportModalResult | null) => void) | null = null;
@@ -47,6 +55,7 @@ export class ExportModal extends Modal {
 	private outputFolder: string;
 	private outputFilename: string;
 	private outputFolderName = "";
+	private mergeIntoSingleFile = false;
 	private preselectedFile?: TFile;
 	private preselectedFolder?: TFolder;
 
@@ -135,6 +144,9 @@ export class ExportModal extends Modal {
 
 		sourceSelect.addEventListener("change", () => {
 			this.sourceType = sourceSelect.value;
+			if (this.mergeIntoSingleFile) {
+				this.outputFilename = defaultMergeFilename(this.sourceType, this.folderPath);
+			}
 			renderSourceFields();
 			renderNameField();
 			updateDefaultFilename();
@@ -164,21 +176,51 @@ export class ExportModal extends Modal {
 		const renderNameField = () => {
 			nameFieldContainer.empty();
 			const isBatch = this.sourceType !== "current-file";
-			const row = nameFieldContainer.createDiv({ cls: "export-modal-row" });
 
 			if (isBatch) {
-				this.updateDefaultFolderName();
-				row.createEl("label", { text: "Folder name" });
-				const input = row.createEl("input", {
-					type: "text",
-					attr: { placeholder: this.sourceType === "folder" ? "folder name" : "files" },
+				if (this.mergeIntoSingleFile) {
+					const nameRow = nameFieldContainer.createDiv({ cls: "export-modal-row" });
+					nameRow.createEl("label", { text: "File name" });
+					const input = nameRow.createEl("input", {
+						type: "text",
+						attr: { placeholder: "Merged" },
+					});
+					input.value = this.outputFilename;
+					input.addEventListener("input", (e) => {
+						this.outputFilename = (e.target as HTMLInputElement).value;
+					});
+					filenameInput = input;
+				} else {
+					this.updateDefaultFolderName();
+					const nameRow = nameFieldContainer.createDiv({ cls: "export-modal-row" });
+					nameRow.createEl("label", { text: "Folder name" });
+					const input = nameRow.createEl("input", {
+						type: "text",
+						attr: { placeholder: this.sourceType === "folder" ? "folder name" : "files" },
+					});
+					input.value = this.outputFolderName;
+					input.addEventListener("input", (e) => {
+						this.outputFolderName = (e.target as HTMLInputElement).value;
+					});
+					filenameInput = null;
+				}
+
+				const mergeRow = nameFieldContainer.createDiv({ cls: "export-modal-merge-row" });
+				const mergeLabel = mergeRow.createEl("label");
+				const checkbox = mergeLabel.createEl("input", { type: "checkbox" });
+				checkbox.checked = this.mergeIntoSingleFile;
+				mergeLabel.appendText(" Merge into a single file");
+				checkbox.addEventListener("change", () => {
+					this.mergeIntoSingleFile = checkbox.checked;
+					// Seed the default only on toggle, so re-renders (e.g. coming
+					// back from the confirmation page) keep a customized name.
+					if (this.mergeIntoSingleFile) {
+						this.outputFilename = defaultMergeFilename(this.sourceType, this.folderPath);
+					}
+					renderNameField();
 				});
-				input.value = this.outputFolderName;
-				input.addEventListener("input", (e) => {
-					this.outputFolderName = (e.target as HTMLInputElement).value;
-				});
-				filenameInput = null;
 			} else {
+				const row = nameFieldContainer.createDiv({ cls: "export-modal-row" });
 				row.createEl("label", { text: "File name" });
 				const input = row.createEl("input", {
 					type: "text",
@@ -305,6 +347,10 @@ export class ExportModal extends Modal {
 		const isSingleFile = result.source.type === "current-file";
 		if (isSingleFile) {
 			summary.createEl("p", { text: `Output: ${result.outputFolder}/${result.outputFilename}` });
+		} else if (result.mergeIntoSingleFile) {
+			summary.createEl("p", {
+				text: `Output: ${result.outputFolder}/${result.outputFilename} (merged into a single file)`,
+			});
 		} else {
 			const folderName = result.outputFolderName ?? "export";
 			summary.createEl("p", { text: `Output: ${result.outputFolder}/${folderName}/ (preserving directory structure)` });
@@ -359,7 +405,11 @@ export class ExportModal extends Modal {
 			profile: this.profile,
 			outputFolder: this.outputFolder,
 			outputFilename: this.outputFilename || "export",
-			outputFolderName: isBatch ? (this.outputFolderName || "files") : undefined,
+			outputFolderName:
+				isBatch && !this.mergeIntoSingleFile
+					? (this.outputFolderName || "files")
+					: undefined,
+			mergeIntoSingleFile: isBatch && this.mergeIntoSingleFile ? true : undefined,
 		};
 	}
 }

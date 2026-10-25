@@ -2,7 +2,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import { ExportRunner } from "@/export/ExportRunner";
 import { ExportPlanBuilder } from "@/export/ExportPlan";
 import { OutputWriter } from "@/export/OutputWriter";
-import { DEFAULT_SETTINGS, ExportSettings } from "@/types";
+import { DEFAULT_SETTINGS, ExportProfileId, ExportSettings } from "@/types";
 import { createMemoryVault } from "@/test-support/memory-vault";
 
 // Real runner, collector, rewriter and writer with a persistent in-memory
@@ -233,5 +233,153 @@ describe("export integrity", () => {
 		expect(result.incompletePaths).toContain("exports/A.md");
 		expect(result.errors).toContain("Failed to copy attachment: a/img.png");
 		expect(fixture.text("exports/export-report.md")).toContain("Failed to copy attachment");
+	});
+});
+
+describe("merged single-file export", () => {
+	function mergedPlan(
+		fixture: ReturnType<typeof createMemoryVault>,
+		paths: string[],
+		name: string,
+		profile: ExportProfileId = "markdown-bundle",
+	) {
+		return new ExportPlanBuilder(
+			fixture.app,
+			{ type: "folder", path: "book", recursive: true },
+			profile, "exports", name, "book",
+		).setInputFiles(paths).setMergeIntoSingleFile(true).build();
+	}
+
+	it("merges notes into one markdown output with a document title and anchors", async () => {
+		const fixture = createMemoryVault();
+		fixture.putText("book/01-intro.md", "Intro that links [[02-chapter]].");
+		fixture.putText("book/02-chapter.md", "Chapter content.");
+
+		const result = await new ExportRunner(fixture.app).run(
+			mergedPlan(fixture, ["book/01-intro.md", "book/02-chapter.md"], "My Book"),
+			integritySettings(),
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.completedPaths).toEqual(["exports/My Book.md"]);
+		expect(result.mergedNotes).toBe(2);
+		const merged = fixture.text("exports/My Book.md");
+		expect(merged).toContain("# My Book");
+		expect(merged).toContain("## 01-intro");
+		expect(merged).toContain("## 02-chapter");
+		// Merged notes have no separate outputs, so cross-note links target
+		// the anchor the renderer actually emits for the section.
+		expect(merged).toContain("[02-chapter](#02-chapter)");
+		expect(fixture.paths().filter((p) => p.endsWith(".md")).sort()).toEqual([
+			"book/01-intro.md",
+			"book/02-chapter.md",
+			"exports/My Book.md",
+		]);
+	});
+
+	it("anchors merged links to the section title, not the file name", async () => {
+		const fixture = createMemoryVault();
+		fixture.putText("book/03-end.md", "---\ntitle: Finale\n---\nThe end.");
+		fixture.putText("book/04-extra.md", "See [[03-end]] and [[03-end#Missing]].");
+
+		const result = await new ExportRunner(fixture.app).run(
+			mergedPlan(fixture, ["book/03-end.md", "book/04-extra.md"], "My Book"),
+			integritySettings(),
+		);
+
+		expect(result.success).toBe(true);
+		const merged = fixture.text("exports/My Book.md");
+		expect(merged).toContain("## Finale");
+		// Both the plain link and the subheading link resolve to the section
+		// anchor — the one target guaranteed to exist.
+		expect(merged).toContain("[03-end](#finale)");
+		expect(merged).not.toContain("#03-end");
+	});
+
+	it("points merged cross-note links at rendered section ids for HTML", async () => {
+		const fixture = createMemoryVault();
+		fixture.putText("book/a.md", "Intro links [[b|see B]].");
+		fixture.putText("book/b.md", "B content");
+
+		const result = await new ExportRunner(fixture.app).run(
+			mergedPlan(fixture, ["book/a.md", "book/b.md"], "My Book", "html-document"),
+			integritySettings(),
+		);
+
+		expect(result.success).toBe(true);
+		const html = fixture.text("exports/My Book.html");
+		expect(html).toContain('id="section-1"');
+		// The alias text distinguishes the rewritten note link from the TOC.
+		expect(html).toContain('<a href="#section-1">see B</a>');
+	});
+
+	it("copies shared attachments once across merged notes", async () => {
+		const fixture = createMemoryVault();
+		fixture.putText("book/a.md", "![[book/img.png]]");
+		fixture.putText("book/b.md", "![[book/img.png]]");
+		fixture.putBinary("book/img.png", new Uint8Array([9]));
+
+		const result = await new ExportRunner(fixture.app).run(
+			mergedPlan(fixture, ["book/a.md", "book/b.md"], "merged"),
+			integritySettings(),
+		);
+
+		expect(result.success).toBe(true);
+		expect(Array.from(fixture.bytes("exports/assets/img.png"))).toEqual([9]);
+		const merged = fixture.text("exports/merged.md");
+		expect(merged.match(/assets\/img\.png/g)).toHaveLength(2);
+	});
+
+	it("relocates the whole output root when the merged destination exists", async () => {
+		vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue(TIMESTAMP);
+		const fixture = createMemoryVault();
+		fixture.putText("book/a.md", "A content");
+		await fixture.app.vault.createFolder("exports");
+
+		const result = await new ExportRunner(fixture.app).run(
+			mergedPlan(fixture, ["book/a.md"], "My Book"),
+			integritySettings(),
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.outputRoot).toBe(`exports-${TIMESTAMP}`);
+		expect(fixture.text(`exports-${TIMESTAMP}/My Book.md`)).toContain("A content");
+		expect(fixture.paths()).not.toContain("exports/My Book.md");
+	});
+
+	it("records missing notes as errors while merging the remaining ones", async () => {
+		const fixture = createMemoryVault();
+		fixture.putText("book/a.md", "A content");
+
+		const result = await new ExportRunner(fixture.app).run(
+			mergedPlan(fixture, ["book/a.md", "book/gone.md"], "merged"),
+			integritySettings(),
+		);
+
+		expect(result.status).toBe("partial");
+		expect(result.mergedNotes).toBe(1);
+		expect(result.errors.join("\n")).toContain("book/gone.md");
+		expect(fixture.text("exports/merged.md")).toContain("A content");
+	});
+
+	it("reports a cancelled merged export without a partial output", async () => {
+		const fixture = createMemoryVault();
+		fixture.putText("book/a.md", "A content");
+		fixture.putText("book/b.md", "B content");
+		const runner = new ExportRunner(fixture.app);
+
+		const result = await runner.run(
+			mergedPlan(fixture, ["book/a.md", "book/b.md"], "merged"),
+			integritySettings(),
+			{
+				onFileStart: () => runner.cancel(),
+				onFileComplete: () => {},
+				onPhase: () => {},
+			},
+		);
+
+		expect(result.status).toBe("cancelled");
+		expect(result.completedPaths).toEqual([]);
+		expect(fixture.paths()).not.toContain("exports/merged.md");
 	});
 });

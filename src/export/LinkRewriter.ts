@@ -22,6 +22,7 @@ export class LinkRewriter {
 	private outputRoot: string;
 	private outputPathMap: Map<string, string>;
 	private currentOutputPath: string;
+	private mergedAnchors: Map<string, string>;
 
 	constructor(
 		app: App,
@@ -31,6 +32,7 @@ export class LinkRewriter {
 		outputPathMap: Map<string, string> = new Map(),
 		currentOutputPath: string = "",
 		outputRoot: string = "",
+		mergedAnchors: Map<string, string> = new Map(),
 	) {
 		this.app = app;
 		this.exportedPaths = exportedPaths;
@@ -41,6 +43,7 @@ export class LinkRewriter {
 		this.outputPathMap = outputPathMap;
 		this.currentOutputPath = currentOutputPath;
 		this.outputRoot = outputRoot;
+		this.mergedAnchors = mergedAnchors;
 	}
 
 	rewrite(markdown: string, sourcePath: string): RewriteResult {
@@ -211,6 +214,12 @@ export class LinkRewriter {
 		target: string,
 		heading?: string,
 	): string {
+		// Merged exports expose one anchor per note — the anchor its renderer
+		// actually emits. Subheading precision is dropped so every link target
+		// verifiably exists in the output.
+		const mergedAnchor = this.mergedAnchors.get(dest);
+		if (mergedAnchor) return mergedAnchor;
+
 		const targetOutput = this.outputPathMap.get(dest);
 		if (targetOutput && this.currentOutputPath) {
 			const relPath = relativePathBetween(this.currentOutputPath, targetOutput);

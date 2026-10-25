@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { ExportRunner, SINGLE_FILE_PHASES } from "@/export/ExportRunner";
+import { ExportRunner, SINGLE_FILE_PHASES, mergedAnchorFor } from "@/export/ExportRunner";
 import { AttachmentCollector } from "@/export/AttachmentCollector";
 import { OutputWriter } from "@/export/OutputWriter";
 import { Platform } from "obsidian";
@@ -749,5 +749,17 @@ describe("embed expansion diagnostics", () => {
 			"Note embeds were not expanded (Expand note embeds setting is off)",
 		);
 		writeSpy.mockRestore();
+	});
+});
+
+describe("mergedAnchorFor", () => {
+	it("uses the rendered section id for HTML and PDF sections", () => {
+		expect(mergedAnchorFor("html-document", "Chapter", 2)).toBe("#section-2");
+		expect(mergedAnchorFor("pdf", "Chapter", 0)).toBe("#section-0");
+	});
+
+	it("uses the title slug for Markdown headings and DOCX bookmarks", () => {
+		expect(mergedAnchorFor("markdown-bundle", "02 Chapter", 1)).toBe("#02-chapter");
+		expect(mergedAnchorFor("docx", "Finale", 3)).toBe("#finale");
 	});
 });

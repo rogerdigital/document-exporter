@@ -33,6 +33,8 @@ export type ExportPlan = {
 	outputRoot: string;
 	outputFilename: string;
 	outputFolderName?: string;
+	/** Batch sources only: render every input note into the single output file. */
+	mergeIntoSingleFile?: boolean;
 	outputFiles: string[];
 	attachmentCopies: AttachmentCopy[];
 };

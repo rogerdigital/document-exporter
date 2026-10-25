@@ -29,7 +29,13 @@ export function validateOutputLeafName(
 
 type OutputLayout = Pick<
 	ExportPlan,
-	"profile" | "source" | "inputFiles" | "outputRoot" | "outputFilename" | "outputFolderName"
+	| "profile"
+	| "source"
+	| "inputFiles"
+	| "outputRoot"
+	| "outputFilename"
+	| "outputFolderName"
+	| "mergeIntoSingleFile"
 >;
 
 export function computeOutputFiles(layout: OutputLayout): string[] {
@@ -43,6 +49,11 @@ export function computeOutputFiles(layout: OutputLayout): string[] {
 	const root = layout.outputFolderName
 		? `${layout.outputRoot}/${layout.outputFolderName}`
 		: layout.outputRoot;
+
+	if (layout.mergeIntoSingleFile) {
+		const baseName = layout.outputFilename.replace(/\.(md|html|htm|pdf|docx|epub)$/i, "");
+		return [`${layout.outputRoot}/${baseName}.${ext}`];
+	}
 
 	if (layout.source.type === "folder") {
 		const prefix = layout.source.path ? `${layout.source.path}/` : "";
@@ -75,6 +86,7 @@ export class ExportPlanBuilder {
 	private outputRoot: string;
 	private outputFilename: string;
 	private outputFolderName?: string;
+	private mergeIntoSingleFile = false;
 	private inputFiles: string[] = [];
 
 	constructor(
@@ -98,21 +110,33 @@ export class ExportPlanBuilder {
 		return this;
 	}
 
+	setMergeIntoSingleFile(value: boolean): this {
+		this.mergeIntoSingleFile = value;
+		return this;
+	}
+
 	build(): ExportPlan {
+		// Merged exports have no batch leaf: output and assets sit directly
+		// under the output root, so the folder name must not survive.
+		const outputFolderName = this.mergeIntoSingleFile
+			? undefined
+			: this.outputFolderName;
 		return {
 			profile: this.profile,
 			source: this.source,
 			inputFiles: this.inputFiles,
 			outputRoot: this.outputRoot,
 			outputFilename: this.outputFilename,
-			outputFolderName: this.outputFolderName,
+			outputFolderName,
+			...(this.mergeIntoSingleFile ? { mergeIntoSingleFile: true } : {}),
 			outputFiles: computeOutputFiles({
 				profile: this.profile,
 				source: this.source,
 				inputFiles: this.inputFiles,
 				outputRoot: this.outputRoot,
 				outputFilename: this.outputFilename,
-				outputFolderName: this.outputFolderName,
+				outputFolderName,
+				mergeIntoSingleFile: this.mergeIntoSingleFile,
 			}),
 			attachmentCopies: [],
 		};

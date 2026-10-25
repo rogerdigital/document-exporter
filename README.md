@@ -7,6 +7,7 @@ Export single notes, entire folders, or hand-picked files into PDF, Word, EPUB, 
 ## Features
 
 - **Batch export** — export an entire folder or selected files at once, preserving directory structure
+- **Merged export** — combine a folder or selected files into a single document in any format, with a table of contents where supported
 - **Embed expansion** — note embeds (`![[Note]]`, `![[Note#Heading]]`) are inlined into exports, with cycle detection and a depth limit
 - **PDF** — generates a print-ready `.pdf` with native Obsidian rendering
 - **Word document** — generates a `.docx` document for editing and sharing
@@ -33,7 +34,8 @@ Multiple ways to start an export:
 2. Choose **format** — PDF, Word document, EPUB e-book, Markdown bundle, or HTML document. PDF is not offered on mobile.
 3. Set **output folder** — type a path, click **Vault** to pick from vault folders, or **Choose folder** to select a system folder (desktop only)
 4. Set **file name** (single file) or **folder name** (batch export) — defaults to the source file or folder name
-5. Click **Next** → review the summary → click **Export**
+5. Optional (batch sources): enable **Merge into a single file** to render every source note into one document, and set its **file name**
+6. Click **Next** → review the summary → click **Export**
 
 A progress bar appears during export showing the current step or file. Click **Cancel** to stop; already-exported files are kept.
 
@@ -57,6 +59,13 @@ A progress bar appears during export showing the current step or file. Click **C
 2. Source: **Selected files** → pick files → Format: **HTML document**
 3. Click **Export**
 4. Result: a standalone `.html` per file with linked assets
+
+### Merge a folder into one PDF
+
+1. Right-click a folder → **Export this folder**
+2. Format: **PDF** → enable **Merge into a single file** → set the file name
+3. Click **Export**
+4. Result: `<output folder>/<file name>.pdf` containing every note as a section, with a table of contents
 
 ## Settings
 
@@ -87,6 +96,7 @@ Native rendering (Obsidian's own engine) is used for desktop PDF and in-app HTML
 
 - Block-reference embeds (`![[Note#^block]]`) are not expanded
 - EPUB embeds images only; other attachments and links between notes are omitted
+- In merged exports, links between merged notes become in-document anchors (markdown) or are omitted (EPUB); links to notes outside the export are unchanged
 - Dataview queries are not executed during export
 - Canvas files are not supported
 - PDF export requires the desktop app and is not offered on mobile

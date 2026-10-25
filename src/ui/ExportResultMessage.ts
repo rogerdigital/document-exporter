@@ -8,7 +8,9 @@ export function exportResultMessage(result: ExportResult): string {
 		failed: "Export failed",
 	} as const;
 	const pieces = [
-		`${labels[result.status]}: ${result.completedFiles}/${result.totalFiles} file(s) complete`,
+		result.mergedNotes === undefined
+			? `${labels[result.status]}: ${result.completedFiles}/${result.totalFiles} file(s) complete`
+			: `${labels[result.status]}: merged ${result.mergedNotes} note(s) into ${result.completedFiles} file(s)`,
 		result.outputRoot,
 	];
 	if (result.incompletePaths.length) {
