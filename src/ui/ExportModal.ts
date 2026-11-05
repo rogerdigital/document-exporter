@@ -1,4 +1,8 @@
-import { App, Modal, Platform, TFile, TFolder, FuzzySuggestModal } from "obsidian";
+import { ExportPlanBuilder, validatePlan } from "@/export/ExportPlan";
+import { ExportSourceResolver } from "@/export/ExportSourceResolver";
+import { OutputWriter } from "@/export/OutputWriter";
+import { resolveOutputPlan } from "@/export/OutputDestination";
+import { App, Modal, Platform, TFile, TFolder, FuzzySuggestModal, Notice } from "obsidian";
 import { ExportProfileId, ExportSettings, ExportSource } from "@/types";
 import {
 	getAvailableProfiles,
@@ -252,8 +256,21 @@ export class ExportModal extends Modal {
 		});
 		const exportButton = buttonRow.createEl("button", { text: "Next", cls: "mod-cta" });
 		exportButton.addEventListener("click", () => {
-			const result = this.buildResult();
-			this.renderConfirmation(result);
+			try {
+				const result = this.buildResult();
+				const files = new ExportSourceResolver(this.app).resolve(result.source);
+				const plan = new ExportPlanBuilder(this.app, result.source, result.profile,
+					result.outputFolder, result.outputFilename, result.outputFolderName)
+					.setInputFiles(files.map(file => file.path))
+					.setMergeIntoSingleFile(result.mergeIntoSingleFile === true).build();
+				const error = validatePlan(plan);
+				if (error) throw new Error(error);
+				const resolved = resolveOutputPlan(plan, this.settings, new OutputWriter(this.app));
+				this.renderConfirmation({ ...result, outputFolder: resolved.outputRoot,
+					outputFolderName: resolved.outputFolderName }, resolved.outputFiles);
+			} catch (error) {
+				new Notice(error instanceof Error ? error.message : String(error));
+			}
 		});
 	}
 
@@ -336,7 +353,7 @@ export class ExportModal extends Modal {
 		}
 	}
 
-	private renderConfirmation(result: ExportModalResult): void {
+	private renderConfirmation(result: ExportModalResult, outputFiles: string[]): void {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.createEl("h2", { text: "Confirm export" });
@@ -346,10 +363,10 @@ export class ExportModal extends Modal {
 
 		const isSingleFile = result.source.type === "current-file";
 		if (isSingleFile) {
-			summary.createEl("p", { text: `Output: ${result.outputFolder}/${result.outputFilename}` });
+			summary.createEl("p", { text: `Output: ${outputFiles[0]}` });
 		} else if (result.mergeIntoSingleFile) {
 			summary.createEl("p", {
-				text: `Output: ${result.outputFolder}/${result.outputFilename} (merged into a single file)`,
+				text: `Output: ${outputFiles[0]} (merged into a single file)`,
 			});
 		} else {
 			const folderName = result.outputFolderName ?? "export";

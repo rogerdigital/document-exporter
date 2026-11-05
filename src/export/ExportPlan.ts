@@ -1,6 +1,7 @@
 import { ExportPlan, ExportProfileId, ExportSource } from "@/types";
 import { App } from "obsidian";
 import { extensionForProfile, longestCommonDirPrefix } from "@/export/utils";
+import { normalizeOutputFolder } from "@/export/OutputPath";
 
 const INVALID_OUTPUT_NAME_RE = /[<>:"/\\|?*]/;
 const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
@@ -100,7 +101,7 @@ export class ExportPlanBuilder {
 		this.app = app;
 		this.source = source;
 		this.profile = profile;
-		this.outputRoot = outputRoot;
+		this.outputRoot = normalizeOutputFolder(outputRoot);
 		this.outputFilename = outputFilename;
 		this.outputFolderName = outputFolderName;
 	}

@@ -121,3 +121,28 @@ describe("merge file name field", () => {
 		expect(fileNameInput(modal).value).toBe("merged");
 	});
 });
+
+it("previews and returns the effective destination without writing files", async () => {
+	const { createMemoryVault } = await import("@/test-support/memory-vault");
+	const { OutputWriter } = await import("@/export/OutputWriter");
+	const f = createMemoryVault();
+	const note = f.putText("note.md", "content");
+	f.putText("Exports/note.pdf", "previous");
+	const app = { ...f.app, workspace: { getActiveFile: () => note } };
+	const stamp = vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue("fixed");
+	try {
+		const modal = new ExportModal(app, { ...DEFAULT_SETTINGS, defaultOutputFolder: " Exports/ " }, note);
+		modal.app = app;
+		modal.open = () => modal.onOpen();
+		modal.close = () => modal.onClose();
+		modal.contentEl = extendElement(document.createElement("div"));
+		const promise = modal.openForResult();
+		modal.onOpen();
+		const before = f.paths();
+		[...modal.contentEl.querySelectorAll("button")].find(b => b.textContent === "Next").click();
+		expect(modal.contentEl.textContent).toContain("Output: Exports/note-fixed/note.pdf");
+		expect(f.paths()).toEqual(before);
+		[...modal.contentEl.querySelectorAll("button")].find(b => b.textContent === "Export").click();
+		expect((await promise).outputFolder).toBe("Exports/note-fixed");
+	} finally { stamp.mockRestore(); }
+});

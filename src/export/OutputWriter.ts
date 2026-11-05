@@ -92,7 +92,9 @@ export class OutputWriter {
 
 	folderExists(folderPath: string): boolean {
 		if (this.isExternal(folderPath)) {
-			return nodeFs?.existsSync(folderPath) ?? false;
+			return nodeFs?.existsSync(folderPath)
+				? nodeFs.statSync(folderPath).isDirectory()
+				: false;
 		}
 		const folder = this.app.vault.getAbstractFileByPath(folderPath);
 		return folder !== null && "children" in folder;
