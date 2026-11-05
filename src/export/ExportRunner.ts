@@ -9,7 +9,7 @@ import { renderHtmlDocument } from "@/formats/html-document";
 import { renderPdf } from "@/formats/pdf";
 import { renderDocx } from "@/formats/docx";
 import { renderEpub } from "@/formats/epub";
-import { relocatePlan } from "@/export/ExportPlan";
+import { resolveOutputPlan } from "@/export/OutputDestination";
 import { isProfileSupported } from "@/export/ProfileCapabilities";
 import { extensionForProfile } from "@/export/utils";
 import { joinMarkdownFragments } from "@/export/FragmentJoiner";
@@ -109,7 +109,12 @@ export class ExportRunner {
 			allWarnings.push(`Large export: ${files.length} files. This may take a while.`);
 		}
 
-		const effectivePlan = this.resolveEffectivePlan(plan, settings, writer);
+		let effectivePlan: ExportPlan;
+		try {
+			effectivePlan = resolveOutputPlan(plan, settings, writer);
+		} catch (error) {
+			return this.failedPreflight(plan, [error instanceof Error ? error.message : String(error)]);
+		}
 		const outputRoot = effectivePlan.outputRoot;
 		const exportedPaths = new Set(effectivePlan.inputFiles);
 
@@ -440,52 +445,6 @@ export class ExportRunner {
 		}
 
 		return false;
-	}
-
-	private resolveEffectivePlan(
-		plan: ExportPlan,
-		settings: ExportSettings,
-		writer: OutputWriter,
-	): ExportPlan {
-		// Merged exports behave like single-file exports: one output plus
-		// assets directly under the output root, relocated as a whole.
-		if (settings.overwriteExisting) return plan;
-
-		if (plan.source.type === "current-file" || plan.mergeIntoSingleFile) {
-			// Reuse the single-file output root only if nothing occupies it;
-			// an existing file or directory — even an empty one — relocates the
-			// whole export so previous outputs keep their attachments.
-			if (!writer.pathExists(plan.outputRoot)) return plan;
-			const candidateRoot = this.nextAvailablePath(
-				writer.timestampedFolder(plan.outputRoot), writer,
-			);
-			return relocatePlan(plan, candidateRoot);
-		}
-
-		const batchRoot = plan.outputFolderName
-			? `${plan.outputRoot}/${plan.outputFolderName}`
-			: plan.outputRoot;
-		if (!writer.pathExists(batchRoot)) return plan;
-
-		const baseFolderName = `${plan.outputFolderName ?? "files"}-${writer.timestampSuffix()}`;
-		const availablePath = this.nextAvailablePath(
-			`${plan.outputRoot}/${baseFolderName}`,
-			writer,
-		);
-		const folderName = availablePath.slice(plan.outputRoot.length + 1);
-		return relocatePlan(plan, plan.outputRoot, folderName);
-	}
-
-	private nextAvailablePath(candidate: string, writer: OutputWriter): string {
-		if (!writer.pathExists(candidate)) return candidate;
-
-		let sequence = 2;
-		let available = `${candidate}-${sequence}`;
-		while (writer.pathExists(available)) {
-			sequence++;
-			available = `${candidate}-${sequence}`;
-		}
-		return available;
 	}
 
 	// Pick a report path that cannot collide with any planned primary output

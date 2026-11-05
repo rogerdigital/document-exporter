@@ -58,7 +58,7 @@ describe("export integrity", () => {
 		expect(fixture.text(`${second.outputRoot}/B.md`)).toContain("assets/img.png");
 	});
 
-	it("relocates when the single-file output root is an existing empty directory", async () => {
+	it("reuses an existing empty output directory", async () => {
 		vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue(TIMESTAMP);
 		const fixture = createMemoryVault();
 		fixture.putText("a/A.md", "content");
@@ -68,28 +68,25 @@ describe("export integrity", () => {
 			.run(singleFilePlan(fixture, "a/A.md", "A"), integritySettings());
 
 		expect(result.success).toBe(true);
-		expect(result.outputRoot).toBe(`exports-${TIMESTAMP}`);
-		expect(fixture.text(`exports-${TIMESTAMP}/A.md`)).toContain("A");
-		expect(fixture.paths()).not.toContain("exports/A.md");
+		expect(result.outputRoot).toBe("exports");
+		expect(fixture.text("exports/A.md")).toContain("A");
 	});
 
-	it("relocates past occupied root and existing timestamp/suffix candidates without modifying them", async () => {
+	it("keeps conflicting exports inside the selected root and skips occupied children", async () => {
 		vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue(TIMESTAMP);
 		const fixture = createMemoryVault();
 		fixture.putText("a/A.md", "content");
-		fixture.putText("exports", "occupied file at root");
-		fixture.putText(`exports-${TIMESTAMP}`, "taken");
-		fixture.putText(`exports-${TIMESTAMP}-2`, "taken");
-
+		fixture.putText("exports/A.md", "previous");
+		fixture.putText(`exports/A-${TIMESTAMP}`, "taken");
+		fixture.putText(`exports/A-${TIMESTAMP}-2`, "taken");
 		const result = await new ExportRunner(fixture.app)
 			.run(singleFilePlan(fixture, "a/A.md", "A"), integritySettings());
-
 		expect(result.success).toBe(true);
-		expect(result.outputRoot).toBe(`exports-${TIMESTAMP}-3`);
-		expect(fixture.text(`exports-${TIMESTAMP}-3/A.md`)).toContain("A");
-		expect(fixture.text("exports")).toBe("occupied file at root");
-		expect(fixture.text(`exports-${TIMESTAMP}`)).toBe("taken");
-		expect(fixture.text(`exports-${TIMESTAMP}-2`)).toBe("taken");
+		expect(result.outputRoot).toBe(`exports/A-${TIMESTAMP}-3`);
+		expect(fixture.text(`${result.outputRoot}/A.md`)).toContain("A");
+		expect(fixture.text("exports/A.md")).toBe("previous");
+		expect(fixture.text(`exports/A-${TIMESTAMP}`)).toBe("taken");
+		expect(fixture.text(`exports/A-${TIMESTAMP}-2`)).toBe("taken");
 	});
 
 	it("keeps primaries, links, assets and report on the relocated batch leaf", async () => {
@@ -98,7 +95,7 @@ describe("export integrity", () => {
 		fixture.putText("notes/A.md", "![[notes/img.png]] See [[B]] and [[missing]]");
 		fixture.putText("notes/B.md", "B content");
 		fixture.putBinary("notes/img.png", new Uint8Array([7]));
-		await fixture.app.vault.createFolder("exports/notes");
+		fixture.putText("exports/notes/A.md", "previous");
 
 		const plan = new ExportPlanBuilder(
 			fixture.app,
@@ -114,7 +111,7 @@ describe("export integrity", () => {
 		expect(fixture.text(`${leaf}/B.md`)).toContain("B content");
 		expect(Array.from(fixture.bytes(`${leaf}/assets/img.png`))).toEqual([7]);
 		expect(fixture.text(`${leaf}/export-report.md`)).toContain("Unresolved link: missing");
-		expect(fixture.paths()).not.toContain("exports/notes/A.md");
+		expect(fixture.text("exports/notes/A.md")).toBe("previous");
 	});
 
 	it("keeps a primary named export-report.md and moves the report to a fresh name", async () => {
@@ -330,11 +327,11 @@ describe("merged single-file export", () => {
 		expect(merged.match(/assets\/img\.png/g)).toHaveLength(2);
 	});
 
-	it("relocates the whole output root when the merged destination exists", async () => {
+	it("relocates merged conflicts inside the selected output folder", async () => {
 		vi.spyOn(OutputWriter.prototype, "timestampSuffix").mockReturnValue(TIMESTAMP);
 		const fixture = createMemoryVault();
 		fixture.putText("book/a.md", "A content");
-		await fixture.app.vault.createFolder("exports");
+		fixture.putText("exports/My Book.md", "previous");
 
 		const result = await new ExportRunner(fixture.app).run(
 			mergedPlan(fixture, ["book/a.md"], "My Book"),
@@ -342,9 +339,9 @@ describe("merged single-file export", () => {
 		);
 
 		expect(result.success).toBe(true);
-		expect(result.outputRoot).toBe(`exports-${TIMESTAMP}`);
-		expect(fixture.text(`exports-${TIMESTAMP}/My Book.md`)).toContain("A content");
-		expect(fixture.paths()).not.toContain("exports/My Book.md");
+		expect(result.outputRoot).toBe(`exports/My Book-${TIMESTAMP}`);
+		expect(fixture.text(`exports/My Book-${TIMESTAMP}/My Book.md`)).toContain("A content");
+		expect(fixture.text("exports/My Book.md")).toBe("previous");
 	});
 
 	it("records missing notes as errors while merging the remaining ones", async () => {

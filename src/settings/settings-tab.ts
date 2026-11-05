@@ -20,7 +20,7 @@ const PROFILE_LABELS: Record<ExportProfileId, string> = {
 const SETTING_META = {
 	defaultOutputFolder: {
 		name: "Output folder",
-		desc: "Exported files will be saved here (relative to vault root). You can change this path to any folder in your vault.",
+		desc: "Use a vault-relative folder, or an absolute system path on desktop. Home paths starting with ~/ are supported on desktop.",
 		aliases: ["directory", "destination", "save location", "export path"],
 	},
 	defaultProfile: {
@@ -45,7 +45,7 @@ const SETTING_META = {
 	},
 	overwriteExisting: {
 		name: "Overwrite existing exports",
-		desc: "Replace existing export files when enabled. When disabled and the destination already exists, the export uses a new timestamped folder for its documents, attachments and report.",
+		desc: "Replace existing export files when enabled. When disabled, empty destinations are reused. Conflicting exports and shared assets are protected using a timestamped folder inside the selected output folder.",
 		aliases: ["replace", "timestamped folder"],
 	},
 } as const;

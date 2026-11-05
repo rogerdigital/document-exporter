@@ -74,11 +74,11 @@ Open **Settings → Document Exporter**. All settings are indexed and searchable
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Default export format | Format pre-selected when opening the dialog | PDF |
-| Output folder | Where exported files are saved | `exports` |
+| Output folder | Vault-relative folder, or an absolute system path on desktop (`~/` is supported) | `exports` |
 | Expand note embeds | Inline `![[Note]]` embeds into exported documents | On |
 | Include source path comments | Add HTML comments showing each section's origin | Off |
 | Copy attachments | Copy referenced images and files into the export | On |
-| Overwrite existing exports | Replace existing export files when enabled. When disabled and the destination already exists, the export uses a new timestamped folder for its documents, attachments and report. "Destination" means the selected root for a single note and the batch leaf for folder/selected-file exports — including an existing empty destination. No source folder or previous export is moved or changed; only the new export's destination changes. | Off |
+| Overwrite existing exports | Replace existing export files when enabled. When disabled, empty destinations are reused. Existing output files or a shared assets directory cause the export to use a timestamped child folder inside the selected output folder (or a suffixed batch folder). Documents, attachments and reports stay together; previous exports are preserved. The confirmation page shows the resolved destination, which is rechecked when exporting. | Off |
 
 ## Format capabilities
 
