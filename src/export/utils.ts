@@ -1,3 +1,5 @@
+import { codeFenceOpening, findCodeFenceEnd, readDisplayMath, replaceInlineMath, type MarkdownMath } from "@/formats/markdown-math";
+
 export function normalizePath(p: string): string {
 	const parts = p.split("/").filter(Boolean);
 	const stack: string[] = [];
@@ -54,6 +56,54 @@ export function restoreCodeBlocks(text: string, blocks: string[]): string {
 		(_, idx: string) => blocks[parseInt(idx)],
 	);
 	return result;
+}
+
+export function protectMarkdownLiterals(markdown: string): {
+	text: string;
+	restore: (text: string) => string;
+} {
+	const equations: string[] = [];
+	let marker = "\uE004MATH";
+	while (markdown.includes(marker)) marker += "\uE004";
+	const protect = (math: MarkdownMath): string => {
+		// Only square brackets can start link or embed syntax in an equation.
+		if (!math.source.includes("[")) return math.raw;
+		equations.push(math.raw);
+		return `${marker}${equations.length - 1}\uE005`;
+	};
+
+	if (!markdown.includes("$") || !markdown.includes("[")) {
+		const { text, blocks } = extractCodeBlocks(markdown);
+		return { text, restore: (result) => restoreCodeBlocks(result, blocks) };
+	}
+
+	const lines = markdown.split("\n");
+	const protectedLines: string[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		const fence = codeFenceOpening(lines[i]);
+		if (fence) {
+			const end = findCodeFenceEnd(lines, i, fence);
+			protectedLines.push(lines.slice(i, end + 1).join("\n"));
+			i = end;
+			continue;
+		}
+		const block = readDisplayMath(lines, i);
+		if (block) {
+			protectedLines.push(protect(block.math));
+			i = block.end;
+			continue;
+		}
+		protectedLines.push(replaceInlineMath(lines[i], protect));
+	}
+
+	const { text, blocks } = extractCodeBlocks(protectedLines.join("\n"));
+	return {
+		text,
+		restore: (result) => restoreCodeBlocks(result, blocks).replace(
+			new RegExp(`${marker}(\\d+)\uE005`, "g"),
+			(token, index: string) => equations[Number(index)] ?? token,
+		),
+	};
 }
 
 function escapeRegex(s: string): string {

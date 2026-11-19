@@ -41,7 +41,7 @@ describe("buildContentOpf", () => {
 	});
 
 	it("emits spec-formatted dcterms:modified at seconds precision", () => {
-		const opf = buildContentOpf("T", ["ch1"], [], "uuid-1", "2026-08-20T04:05:06.789Z");
+		const opf = buildContentOpf("T", ["ch1"], [], { uuid: "uuid-1", modified: "2026-08-20T04:05:06.789Z" });
 		expect(opf).toMatch(/<meta property="dcterms:modified">2026-08-20T04:05:06Z<\/meta>/);
 	});
 
@@ -108,6 +108,17 @@ const PLAN = {
 } as ExportPlan;
 
 describe("renderEpub", () => {
+	it("exports LaTeX as MathML and declares it in the chapter manifest", async () => {
+		const w = makeWriter();
+		await renderEpub(makeDoc("Reference $v_{ref}$.\n\n$$\n\\frac{a}{b}\n$$"), PLAN, w.writer as never);
+		const chapter = readStoredZipEntry(w.written!, "OEBPS/chapter-1.xhtml");
+		const opf = readStoredZipEntry(w.written!, "OEBPS/content.opf");
+		expect(chapter.match(/<math\b/g) ?? []).toHaveLength(2);
+		expect(chapter).toContain("<msub>");
+		expect(chapter).toContain("<mfrac>");
+		expect(opf).toContain('href="chapter-1.xhtml" media-type="application/xhtml+xml" properties="mathml"');
+	});
+
 	it("writes a single .epub", async () => {
 		const w = makeWriter();
 		const paths: string[] = [];

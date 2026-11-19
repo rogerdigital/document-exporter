@@ -2,6 +2,39 @@ import { describe, it, expect, vi } from "vitest";
 import { buildHtmlDoc, markdownToBasicHtml } from "@/formats/html-document";
 
 describe("HTML Document rendering", () => {
+	it("renders formulas in basic HTML while preserving dollars in code, prices and URLs", () => {
+		const html = markdownToBasicHtml([
+			"**$x^2$** and " + String.raw`\$y\$` + " and `$z$`.",
+			"Prices are $5 and $10. [Link](https://example.com/$id$)",
+			"~~~text",
+			"$$",
+			"$literal$",
+			"$$",
+			"~~~",
+			"$$\\sqrt{y}$$",
+		].join("\n"));
+
+		expect(html.match(/<math\b/g) ?? []).toHaveLength(2);
+		expect(html).toContain("<strong><math");
+		expect(html).toContain("<msqrt>");
+		expect(html).toContain("$y$ and <code>$z$</code>");
+		expect(html).toContain('Prices are $5 and $10. <a href="https://example.com/$id$">');
+		expect(html).toContain("<pre><code>$$\n$literal$\n$$\n</code></pre>");
+	});
+
+	it("keeps malformed and untrusted formulas as escaped text", () => {
+		const warnings: string[] = [];
+		const html = markdownToBasicHtml(
+			String.raw`$\badcommand{a<b}$ and $\href{https://example.com}{x}$`,
+			warnings,
+		);
+
+		expect(html).toContain(String.raw`$\badcommand{a&lt;b}$`);
+		expect(html).toContain(String.raw`$\href{https://example.com}{x}$`);
+		expect(html).not.toContain("<math");
+		expect(warnings).toHaveLength(2);
+	});
+
 	describe("TOC generation", () => {
 		it("generates TOC with section links", async () => {
 			const { html } = await renderTestHtml([

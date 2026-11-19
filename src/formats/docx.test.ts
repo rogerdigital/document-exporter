@@ -66,6 +66,44 @@ async function renderAndReadDocumentXml(markdown: string): Promise<string> {
 }
 
 describe("DOCX rendering", () => {
+	it("exports inline and display LaTeX as editable Word equations", async () => {
+		const xml = await renderAndReadDocumentXml([
+			"Reference $v_{ref}$ and $x^2$.",
+			"$$",
+			String.raw`\frac{a}{b} + \sqrt{x}`,
+			"$$",
+			"$$y_1$$",
+		].join("\n"));
+
+		expect(xml.match(/<m:oMath(?:\s|>)/g) ?? []).toHaveLength(4);
+		expect(xml.match(/<m:oMathPara>/g)).toHaveLength(2);
+		expect(xml).toContain("<m:sSub>");
+		expect(xml).toContain("<m:sSup>");
+		expect(xml).toContain("<m:f>");
+		expect(xml).toContain("<m:rad>");
+		expect(xml).not.toContain("$v_{ref}$");
+	});
+
+	it("preserves code and invalid formulas and renders equations in tables", async () => {
+		const xml = await renderAndReadDocumentXml([
+			"Prices are $5 and $10. " + String.raw`\$x\$` + " and `$code$`.",
+			"~~~tex",
+			"$literal$",
+			"~~~",
+			"| Equation | Notes |",
+			"| --- | --- |",
+			"| $|x|$ | Text |",
+			String.raw`$\bogus{a<b}$`,
+		].join("\n"));
+
+		expect(xml.match(/<m:oMath(?:\s|>)/g) ?? []).toHaveLength(1);
+		expect(xml.match(/<w:tc>/g) ?? []).toHaveLength(4);
+		expect(xml).toContain("Prices are $5 and $10. $x$");
+		expect(xml).toContain(">$code$<");
+		expect(xml).toContain(">$literal$<");
+		expect(xml).toContain(String.raw`$\bogus{a&lt;b}$`);
+	});
+
 	it("renders escaped asterisks as literal text without italics", async () => {
 		const xml = await renderAndReadDocumentXml("a \\* b \\* c");
 
@@ -308,7 +346,7 @@ describe("DOCX rendering", () => {
 		expect(packageText).toContain('w:eastAsia="Apple Color Emoji"');
 	});
 
-	it("includes image drawing elements when attachments are present", async () => {
+	it("keeps an embedded image on the same line as a formula", async () => {
 		let writtenData: Uint8Array | null = null;
 		const writer = {
 			ensureFolder: vi.fn(),
@@ -337,7 +375,7 @@ describe("DOCX rendering", () => {
 			sections: [{
 				title: "Image Test",
 				sourcePath: "note.md",
-				markdown: "![alt text](assets/image.png)",
+				markdown: "$x^2$ ![alt text](assets/image.png)",
 				frontmatter: {},
 			}],
 			attachments: [{
@@ -351,6 +389,7 @@ describe("DOCX rendering", () => {
 
 		expect(warnings).toEqual([]);
 		const packageText = new TextDecoder().decode(writtenData ?? new Uint8Array());
+		expect(packageText).toContain("<m:sSup>");
 		expect(packageText).toContain("w:drawing");
 		expect(packageText).toContain("a:blip");
 		expect(packageText).toContain("word/media/image1.png");

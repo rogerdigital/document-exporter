@@ -101,11 +101,11 @@ async function renderSections(
 				sectionHtml = rewriteAppProtocolUrls(result.html, attachments);
 				allWarnings.push(...result.warnings);
 			} catch {
-				sectionHtml = markdownToBasicHtml(s.markdown);
+				sectionHtml = markdownToBasicHtml(s.markdown, allWarnings);
 				allWarnings.push(`Native rendering failed for "${s.sourcePath}", using basic converter`);
 			}
 		} else {
-			sectionHtml = markdownToBasicHtml(s.markdown);
+			sectionHtml = markdownToBasicHtml(s.markdown, allWarnings);
 		}
 
 		const skipHeading = isSingleSection && s.title === docTitle;

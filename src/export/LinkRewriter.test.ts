@@ -77,6 +77,15 @@ describe("LinkRewriter", () => {
 		expect(markdown).toBe("See [Note1](#note1) for details");
 	});
 
+	it("preserves brackets in inline and display math while rewriting adjacent links", () => {
+		const result = makeRewriter("docx").rewrite(
+			"See [[Note1]] and $[[x]]$.\n$$\n[[y]]\n$$",
+			"notes/note1.md",
+		);
+		expect(result.markdown).toBe("See [Note1](#note1) and $[[x]]$.\n$$\n[[y]]\n$$");
+		expect(result.warnings).toEqual([]);
+	});
+
 	it("preserves alias text in wiki links", () => {
 		const rewriter = makeRewriter();
 		const { markdown } = rewriter.rewrite("See [[Note1|My Alias]]", "notes/note1.md");

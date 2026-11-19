@@ -92,6 +92,8 @@ Native rendering (Obsidian's own engine) is used for desktop PDF and in-app HTML
 | Markdown bundle | Markdown passthrough | Copied to `assets/` | Copied to `assets/` | Rewritten relative | Desktop, mobile | — |
 | HTML | Native in-app renderer (basic converter as fallback) | Copied to `assets/` | Copied to `assets/` | Rewritten relative | Desktop, mobile | — |
 
+Word exports convert supported inline (`$…$`) and display (`$$…$$`) LaTeX to editable equations. EPUB and the basic HTML renderer emit MathML. Unsupported formulas in these converters are kept as source text and reported as export warnings.
+
 ## Limitations
 
 - Block-reference embeds (`![[Note#^block]]`) are not expanded

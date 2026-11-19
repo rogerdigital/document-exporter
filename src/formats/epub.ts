@@ -27,14 +27,17 @@ export function buildContentOpf(
 	title: string,
 	chapterIds: string[],
 	images: { name: string; mediaType: string }[],
-	uuid: string = crypto.randomUUID(),
-	modified: string = new Date().toISOString(),
+	{
+		uuid = crypto.randomUUID(),
+		modified = new Date().toISOString(),
+		mathChapters = new Set<string>(),
+	}: { uuid?: string; modified?: string; mathChapters?: ReadonlySet<string> } = {},
 ): string {
 	const manifest = [
 		'<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
 		'<item id="css" href="styles.css" media-type="text/css"/>',
 		...chapterIds.map((id) =>
-			`<item id="${id}" href="chapter-${id.slice(2)}.xhtml" media-type="application/xhtml+xml"/>`),
+			`<item id="${id}" href="chapter-${id.slice(2)}.xhtml" media-type="application/xhtml+xml"${mathChapters.has(id) ? ' properties="mathml"' : ""}/>`),
 		// Sequential ids + generated filenames: raw attachment names with
 		// spaces/&/quotes/CJK never become XML ids or hrefs.
 		...images.map((img, i) =>
@@ -133,8 +136,9 @@ export async function renderEpub(
 	const warnings: string[] = [];
 
 	const images = await collectEpubImages(doc.attachments, app, warnings);
-	const chapters = buildChapters(doc, images);
+	const chapters = buildChapters(doc, images, warnings);
 	const chapterIds = chapters.map((_, i) => `ch${i + 1}`);
+	const mathChapters = new Set(chapterIds.filter((_, i) => chapters[i].html.includes("<math ")));
 
 	const files: { name: string; data: Uint8Array }[] = [
 		{ name: "mimetype", data: encoder.encode("application/epub+zip") },
@@ -144,6 +148,7 @@ export async function renderEpub(
 				doc.title,
 				chapterIds,
 				images.map((img) => ({ name: img.name, mediaType: img.mediaType })),
+				{ mathChapters },
 			)) },
 		{ name: "OEBPS/nav.xhtml", data: encoder.encode(
 			buildNavXhtml(doc.title, chapters.map((c) => c.title))) },
@@ -169,12 +174,12 @@ export async function renderEpub(
 	return warnings;
 }
 
-function buildChapters(doc: AssembledDocument, images: EpubImage[]): { title: string; html: string }[] {
+function buildChapters(doc: AssembledDocument, images: EpubImage[], warnings: string[]): { title: string; html: string }[] {
 	const isSingle = doc.sections.length === 1;
 	return doc.sections.map((section, i) => {
 		const skipHeading = isSingle && section.title === doc.title;
 		const heading = skipHeading ? "" : `<h2>${escapeHtml(section.title)}</h2>`;
-		const body = toXhtml(markdownToBasicHtml(rewriteImageRefsMarkdown(section.markdown, images)));
+		const body = toXhtml(markdownToBasicHtml(rewriteImageRefsMarkdown(section.markdown, images), warnings));
 		return { title: section.title || `Chapter ${i + 1}`, html: `${heading}${body}` };
 	});
 }

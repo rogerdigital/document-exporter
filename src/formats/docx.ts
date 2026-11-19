@@ -4,6 +4,8 @@ import { OutputWriter } from "@/export/OutputWriter";
 import { slugify } from "@/export/LinkRewriter";
 import { createZip } from "@/formats/zip";
 import { MARKDOWN_ESCAPE_RE } from "@/formats/html-document";
+import { type MarkdownMath, readDisplayMath, replaceInlineMath, codeFenceOpening, findCodeFenceEnd } from "@/formats/markdown-math";
+import { renderWordMath } from "@/formats/word-math";
 
 type DocxRun = {
 	text: string;
@@ -12,6 +14,7 @@ type DocxRun = {
 	code?: boolean;
 	emoji?: boolean;
 	drawing?: string;
+	math?: MarkdownMath;
 	break?: boolean;
 	hyperlink?: string;
 	relationshipId?: string;
@@ -70,7 +73,7 @@ export async function renderDocx(
 	const blocks = buildDocxBlocks(doc, images);
 	assignBookmarks(blocks);
 	const hyperlinks = assignHyperlinkRelationships(blocks, images.length + 2);
-	const documentXml = buildDocumentXml(blocks);
+	const documentXml = buildDocumentXml(blocks, warnings);
 
 	const files: { name: string; data: Uint8Array }[] = [
 		{ name: "[Content_Types].xml", data: encodeXml(buildContentTypes(images)) },
@@ -214,7 +217,7 @@ function parseMarkdownToBlocks(markdown: string, imageMap: Map<string, DocxImage
 	// into a single paragraph with <w:br/> separating them, matching how
 	// Obsidian renders them in one paragraph.
 	const isSpecialLine = (line: string, idx: number): boolean => {
-		if (line.startsWith("```")) return true;
+		if (codeFenceOpening(line) || line.trimStart().startsWith("$$")) return true;
 		if (/^(#{1,6})\s+(.+)$/.test(line)) return true;
 		if (line.includes("|") && idx + 1 < lines.length && /^\|[-:| ]+\|$/.test(lines[idx + 1])) return true;
 		if (/^[\s]*[-*+]\s/.test(line)) return true;
@@ -236,9 +239,11 @@ function parseMarkdownToBlocks(markdown: string, imageMap: Map<string, DocxImage
 			continue;
 		}
 
-		if (line.startsWith("```")) {
+		const fence = codeFenceOpening(line);
+		if (fence) {
+			const end = findCodeFenceEnd(lines, i, fence);
 			i++;
-			while (i < lines.length && !lines[i].startsWith("```")) {
+			while (i < end) {
 				blocks.push({
 					kind: "paragraph",
 					style: "Code",
@@ -247,6 +252,14 @@ function parseMarkdownToBlocks(markdown: string, imageMap: Map<string, DocxImage
 				i++;
 			}
 			i++;
+			continue;
+		}
+
+		const displayMath = readDisplayMath(lines, i);
+		if (displayMath) {
+			const { math, end } = displayMath;
+			blocks.push({ kind: "paragraph", runs: [{ text: math.raw, math }] });
+			i = end + 1;
 			continue;
 		}
 
@@ -402,7 +415,12 @@ function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] 
 	// literal characters are restored into the runs afterwards. Private-use
 	// sentinels cannot collide with real note text.
 	const escapes: string[] = [];
-	const marked = text.replace(MARKDOWN_ESCAPE_RE, (_match: string, ch: string) => {
+	const formulas: MarkdownMath[] = [];
+	const withMath = replaceInlineMath(text, (math) => {
+		formulas.push(math);
+		return `\uE002${formulas.length - 1}\uE003`;
+	});
+	const marked = withMath.replace(MARKDOWN_ESCAPE_RE, (_match: string, ch: string) => {
 		escapes.push(ch);
 		return `\uE000${escapes.length - 1}\uE001`;
 	});
@@ -448,7 +466,16 @@ function parseInline(text: string, imageMap: Map<string, DocxImage>): DocxRun[] 
 		runs.push(createTextRun(unmark(marked.slice(lastIndex))));
 	}
 
-	return runs.length > 0 ? runs : [createTextRun(unmark(marked))];
+	if (formulas.length === 0) return runs.length > 0 ? runs : [createTextRun(unmark(marked))];
+
+	return runs.flatMap((run) => {
+		if (!run.text.includes("\uE002")) return [run];
+		return run.text.split(/(\uE002\d+\uE003)/g).filter(Boolean).map((text) => {
+			const index = text.match(/^\uE002(\d+)\uE003$/)?.[1];
+			const math = index === undefined ? undefined : formulas[Number(index)];
+			return math ? { ...run, text: math.raw, math } : { ...run, text };
+		});
+	});
 }
 
 function unwrapMarkdownDestination(value: string): string {
@@ -507,6 +534,11 @@ function buildDrawingXml(img: DocxImage, altText: string): string {
 function parseTableRow(line: string): string[] {
 	// Split on unescaped pipes only: `\|` keeps a literal pipe inside the
 	// cell, left as-is so parseInline's escape handling restores it.
+	const formulas: string[] = [];
+	line = replaceInlineMath(line, ({ raw }) => {
+		formulas.push(raw);
+		return `\uE002${formulas.length - 1}\uE003`;
+	});
 	const cells: string[] = [];
 	let current = "";
 	for (let i = 0; i < line.length; i++) {
@@ -522,7 +554,8 @@ function parseTableRow(line: string): string[] {
 		}
 	}
 	cells.push(current);
-	return cells.slice(1, -1).map((cell) => cell.trim());
+	return cells.slice(1, -1).map((cell) =>
+		cell.trim().replace(/\uE002(\d+)\uE003/g, (raw, index: string) => formulas[Number(index)] ?? raw));
 }
 
 function assignHyperlinkRelationships(
@@ -558,27 +591,27 @@ function assignHyperlinkRelationships(
 	return hyperlinks;
 }
 
-function buildDocumentXml(blocks: DocxBlock[]): string {
-	const body = blocks.map(blockToXml).join("");
+function buildDocumentXml(blocks: DocxBlock[], warnings: string[]): string {
+	const renderRun = (run: DocxRun): string => runToXml(run, warnings);
+	const body = blocks.map((block) => block.kind === "table"
+		? tableToXml(block, renderRun)
+		: paragraphToXml(block, renderRun)).join("");
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
 xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
 xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"
+xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
 xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body>
 </w:document>`;
 }
 
-function blockToXml(block: DocxBlock): string {
-	return block.kind === "table" ? tableToXml(block) : paragraphToXml(block);
-}
-
-function tableToXml(table: DocxTable): string {
+function tableToXml(table: DocxTable, renderRun: (run: DocxRun) => string): string {
 	const rows = table.rows.map((row) => {
 		const cells = row.map((cell) => {
 			const runs = cell.runs.map((run) => {
-				return runToXml(cell.header ? { ...run, bold: true } : run);
+				return renderRun(cell.header ? { ...run, bold: true } : run);
 			}).join("");
 			return `<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p>${runs}</w:p></w:tc>`;
 		}).join("");
@@ -588,9 +621,9 @@ function tableToXml(table: DocxTable): string {
 	return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>${rows}</w:tbl>`;
 }
 
-function paragraphToXml(paragraph: DocxParagraph): string {
+function paragraphToXml(paragraph: DocxParagraph, renderRun: (run: DocxRun) => string): string {
 	const style = paragraph.style ? `<w:pPr><w:pStyle w:val="${paragraph.style}"/></w:pPr>` : "";
-	const runs = paragraph.runs.map(runToXml).join("");
+	const runs = paragraph.runs.map(renderRun).join("");
 	const start = paragraph.bookmarkId
 		? `<w:bookmarkStart w:id="${paragraph.bookmarkId}" w:name="B${paragraph.bookmarkId}"/>`
 		: "";
@@ -598,13 +631,13 @@ function paragraphToXml(paragraph: DocxParagraph): string {
 	return `<w:p>${style}${start}${runs}${end}</w:p>`;
 }
 
-function runToXml(run: DocxRun): string {
+function runToXml(run: DocxRun, warnings: string[]): string {
 	if (run.hyperlink?.startsWith("#")) {
 		const textRun = runToXml({
 			...run,
 			hyperlink: undefined,
 			relationshipId: undefined,
-		});
+		}, warnings);
 		return `<w:hyperlink w:anchor="${escapeXml(run.hyperlink.slice(1))}">${textRun}</w:hyperlink>`;
 	}
 	if (run.hyperlink && run.relationshipId) {
@@ -612,8 +645,13 @@ function runToXml(run: DocxRun): string {
 			...run,
 			hyperlink: undefined,
 			relationshipId: undefined,
-		});
+		}, warnings);
 		return `<w:hyperlink r:id="${run.relationshipId}">${textRun}</w:hyperlink>`;
+	}
+	if (run.math) {
+		const xml = renderWordMath(run.math);
+		if (xml) return (run.break ? "<w:r><w:br/></w:r>" : "") + xml;
+		warnings.push("A LaTeX formula could not be converted to a Word equation and was kept as text.");
 	}
 	if (run.drawing) {
 		return `<w:r>${run.drawing}</w:r>`;
@@ -627,7 +665,8 @@ function runToXml(run: DocxRun): string {
 	// A soft line break (<w:br/>) inside a paragraph. Placed before the text so
 	// consecutive plain-text lines share one <w:p> with breaks between them.
 	const br = run.break ? "<w:br/>" : "";
-	return `<w:r>${runProps}${br}<w:t xml:space="preserve">${escapeXml(run.text)}</w:t></w:r>`;
+	const text = escapeXml(run.text).replace(/\r?\n/g, '</w:t><w:br/><w:t xml:space="preserve">');
+	return `<w:r>${runProps}${br}<w:t xml:space="preserve">${text}</w:t></w:r>`;
 }
 
 function buildContentTypes(images: DocxImage[]): string {
