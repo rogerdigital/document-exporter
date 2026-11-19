@@ -1,6 +1,6 @@
 import { App, TAbstractFile, TFile, parseLinktext, resolveSubpath } from "obsidian";
 import { stripFrontmatter } from "@/export/DocumentAssembler";
-import { extractCodeBlocks, restoreCodeBlocks } from "@/export/utils";
+import { protectMarkdownLiterals } from "@/export/utils";
 import type { DocumentFragment } from "@/types";
 
 const WIKI_EMBED_RE = /!\[\[([^\]]+)]]/g;
@@ -22,11 +22,11 @@ export class EmbedExpander {
 
 	async expand(markdown: string, sourcePath: string): Promise<ExpandResult> {
 		const warnings: string[] = [];
-		const { text, blocks } = extractCodeBlocks(markdown);
+		const { text, restore } = protectMarkdownLiterals(markdown);
 		const fragments = await this.expandText(text, sourcePath, [], warnings);
 		const restored = fragments.map((f) => ({
 			...f,
-			markdown: restoreCodeBlocks(f.markdown, blocks),
+			markdown: restore(f.markdown),
 		}));
 		return {
 			fragments: coalesceAdjacentFragments(restored),
@@ -126,13 +126,12 @@ export class EmbedExpander {
 		}
 
 		this.embeddedPaths.add(dest);
-		// Per-level code-fence protection: an embed inside a fenced block
-		// *within* the embedded note must not be expanded either.
-		const { text, blocks } = extractCodeBlocks(content);
+		// Protect code and equations separately at each level of expansion.
+		const { text, restore } = protectMarkdownLiterals(content);
 		const inner = await this.expandText(text, dest, [...stack, identity], warnings);
 		const restored = inner.map((f) => ({
 			...f,
-			markdown: restoreCodeBlocks(f.markdown, blocks),
+			markdown: restore(f.markdown),
 		}));
 		return markBlockBoundaries(restored);
 	}

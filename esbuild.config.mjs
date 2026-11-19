@@ -1,10 +1,17 @@
 import esbuild from "esbuild";
 import process from "process";
+import { readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 
 const prod = process.argv[2] === "production";
 
+// Releases ship the bundled main.js, so include the notices of bundled dependencies.
+const dependencyNotices = ["katex", "@xmldom/xmldom"]
+	.map((name) => readFileSync(new URL(`./node_modules/${name}/LICENSE`, import.meta.url), "utf8").trim())
+	.join("\n\n");
+
 const context = await esbuild.context({
+	banner: { js: `/*!\n${dependencyNotices}\n*/` },
 	entryPoints: ["src/main.ts"],
 	bundle: true,
 	external: [

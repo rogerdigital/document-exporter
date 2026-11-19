@@ -64,6 +64,16 @@ describe("EmbedExpander", () => {
 		expect(result.warnings).toEqual([]);
 	});
 
+	it("keeps wiki-shaped text literal inside equations in embedded notes", async () => {
+		const markdown = "$\\text{![[example]]}$\n$$\n![[example]]\n$$";
+		const app = makeApp({ "chapter.md": markdown, "example.md": "Expanded" });
+		const result = await new EmbedExpander(app).expand("![[chapter]]", "main.md");
+
+		expect(result.fragments.map((fragment) => fragment.markdown)).toEqual([markdown]);
+		expect(result.embeddedPaths).toEqual(["chapter.md"]);
+		expect(result.warnings).toEqual([]);
+	});
+
 	it("strips frontmatter from the embedded note", async () => {
 		const app = makeApp({
 			"main.md": "![[note]]",

@@ -1,6 +1,6 @@
 import { App } from "obsidian";
 import { ExportProfileId, AttachmentCopy } from "@/types";
-import { normalizePath, extractCodeBlocks, restoreCodeBlocks, relativePathBetween } from "@/export/utils";
+import { normalizePath, protectMarkdownLiterals, relativePathBetween } from "@/export/utils";
 
 const WIKI_LINK_RE = /\[\[([^\]]+)]]/g;
 const WIKI_EMBED_RE = /!\[\[([^\]]+)]]/g;
@@ -49,7 +49,7 @@ export class LinkRewriter {
 	rewrite(markdown: string, sourcePath: string): RewriteResult {
 		const warnings: string[] = [];
 
-		const { text, blocks } = extractCodeBlocks(markdown);
+		const { text, restore } = protectMarkdownLiterals(markdown);
 		const embedReplacements: string[] = [];
 		const attachmentBlockReplacements: string[] = [];
 
@@ -173,7 +173,7 @@ export class LinkRewriter {
 		});
 
 		result = restoreReplacements(result, embedReplacements);
-		result = restoreCodeBlocks(result, blocks);
+		result = restore(result);
 		result = restoreAttachmentBlockReplacements(
 			result,
 			attachmentBlockReplacements,
